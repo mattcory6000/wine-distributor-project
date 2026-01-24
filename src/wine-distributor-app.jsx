@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Wine, Package, DollarSign, Users, LogOut, Menu, X, Search, ShoppingCart, Check, Clock, FileSpreadsheet, Settings, TrendingUp } from 'lucide-react';
+import { Upload, Wine, Package, Users, LogOut, X, Search, ShoppingCart, FileSpreadsheet, Settings } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const WineDistributorApp = () => {
@@ -1073,8 +1073,8 @@ const WineDistributorApp = () => {
                           <td className="p-3 text-slate-600">{product.packSize}</td>
                           <td className="p-3">
                             <span className={`text-xs px-2 py-1 rounded ${calc.formulaUsed === 'wine' ? 'bg-purple-100 text-purple-700' :
-                                calc.formulaUsed === 'spirits' ? 'bg-amber-100 text-amber-700' :
-                                  'bg-blue-100 text-blue-700'
+                              calc.formulaUsed === 'spirits' ? 'bg-amber-100 text-amber-700' :
+                                'bg-blue-100 text-blue-700'
                               }`}>
                               {calc.formulaUsed}
                             </span>
