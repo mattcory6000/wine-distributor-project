@@ -1,0 +1,32 @@
+[
+  {
+    "id": "user-1769562272835",
+    "username": "treys",
+    "password": "Richelieu",
+    "type": "admin"
+  },
+  {
+    "id": "user-1769562389315",
+    "username": "customer",
+    "password": "troubleshoot",
+    "type": "customer"
+  },
+  {
+    "id": "user-1769563045495",
+    "username": "cart-user",
+    "password": "pass",
+    "type": "customer"
+  },
+  {
+    "id": "user-1769564415345",
+    "username": "adminuser777",
+    "password": "adminpassword777",
+    "type": "admin"
+  },
+  {
+    "id": "user-1769565823852",
+    "username": "adminuser999adminuser777adminuser777",
+    "password": "adminpassword999adminpassword777admadminpassword777inpassword777",
+    "type": "admin"
+  }
+]
