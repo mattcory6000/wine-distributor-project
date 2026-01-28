@@ -82,5 +82,29 @@
     "username": "test_sync_admin",
     "password": "password123adminpass123",
     "type": "admin"
+  },
+  {
+    "id": "user-1769622224807",
+    "username": "bug_customer",
+    "password": "password",
+    "type": "customer"
+  },
+  {
+    "id": "user-1769622263882",
+    "username": "bug_customerbug_admin",
+    "password": "passwordpassword",
+    "type": "admin"
+  },
+  {
+    "id": "user-1769622885493",
+    "username": "bug_admin",
+    "password": "password",
+    "type": "admin"
+  },
+  {
+    "id": "user-1769623820468",
+    "username": "admin-test",
+    "password": "password",
+    "type": "admin"
   }
 ]

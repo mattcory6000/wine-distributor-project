@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Wine, Package, Users, LogOut, X, Search, ShoppingCart, FileSpreadsheet, Settings, ChevronDown, ChevronRight, ClipboardList, ListPlus, UserCheck } from 'lucide-react';
+import { Upload, Wine, Package, Users, LogOut, X, Search, ShoppingCart, FileSpreadsheet, Settings, ChevronDown, ChevronRight, ClipboardList, ListPlus, UserCheck, Edit, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const WineDistributorApp = () => {
@@ -52,6 +52,8 @@ const WineDistributorApp = () => {
     upload: false,
     dressner: false
   });
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id, name }
 
   const toggleSection = (section) => {
     setCollapsedSections(prev => ({
@@ -625,6 +627,33 @@ const WineDistributorApp = () => {
     alert('Special order list updated and rep notified!');
   };
 
+  const deleteProduct = async (productId) => {
+    const updatedProducts = products.filter(p => p.id !== productId);
+    await saveProducts(updatedProducts);
+    setUploadStatus('Product deleted successfully');
+    setTimeout(() => setUploadStatus(''), 3000);
+    setDeleteConfirmation(null);
+  };
+
+  const handleUpdateProduct = async (updatedProduct) => {
+    const pricing = calculateFrontlinePrice(updatedProduct);
+    const finalProduct = { ...updatedProduct, ...pricing };
+    const updatedProducts = products.map(p => p.id === finalProduct.id ? finalProduct : p);
+    await saveProducts(updatedProducts);
+    setUploadStatus(`Updated ${finalProduct.producer} - ${finalProduct.productName}`);
+    setTimeout(() => setUploadStatus(''), 3000);
+    setEditingProduct(null);
+  };
+
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    const updatedOrders = orders.map(order =>
+      order.id === orderId ? { ...order, status: newStatus } : order
+    );
+    await saveOrders(updatedOrders);
+    setUploadStatus(`Order status updated to ${newStatus}`);
+    setTimeout(() => setUploadStatus(''), 3000);
+  };
+
   const closeSidebar = () => {
     setShowList(false);
     setSelectedCustomerForList(null);
@@ -799,48 +828,10 @@ const WineDistributorApp = () => {
           <div className="mb-6">
             <button
               onClick={async () => {
-                if (window.confirm('Clear all products, orders, and reset formulas? This cannot be undone.')) {
-                  try {
-                    // Try to delete each key, but don't fail if it doesn't exist
-                    try { await window.storage.delete('wine-products'); } catch (e) { console.log('No products to delete'); }
-                    try { await window.storage.delete('wine-orders'); } catch (e) { console.log('No orders to delete'); }
-                    try { await window.storage.delete('wine-discontinued'); } catch (e) { console.log('No discontinued to delete'); }
-                    try { await window.storage.delete('wine-formulas'); } catch (e) { console.log('No formulas to delete'); }
-
-                    setProducts([]);
-                    setOrders([]);
-                    setDiscontinuedProducts([]);
-                    setFormulas({
-                      wine: {
-                        taxPerLiter: 0.32,
-                        taxFixed: 0.15,
-                        shippingPerCase: 13,
-                        marginDivisor: 0.65,
-                        srpMultiplier: 1.47
-                      },
-                      spirits: {
-                        taxPerLiter: 1.17,
-                        taxFixed: 0.15,
-                        shippingPerCase: 13,
-                        marginDivisor: 0.65,
-                        srpMultiplier: 1.47
-                      },
-                      nonAlcoholic: {
-                        taxPerLiter: 0,
-                        taxFixed: 0,
-                        shippingPerCase: 13,
-                        marginDivisor: 0.65,
-                        srpMultiplier: 1.47
-                      }
-                    });
-
-                    alert('All data cleared successfully! Page will reload.');
-                    setTimeout(() => window.location.reload(), 500);
-                  } catch (error) {
-                    console.error('Clear error:', error);
-                    alert('Error clearing data. Check console for details.');
-                  }
-                }
+                setDeleteConfirmation({
+                  type: 'reset',
+                  name: 'ALL SYSTEM DATA'
+                });
               }}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
@@ -936,6 +927,7 @@ const WineDistributorApp = () => {
                           <th className="text-right p-3 font-semibold text-slate-700">Frontline Btl</th>
                           <th className="text-right p-3 font-semibold text-slate-700">Frontline Case</th>
                           <th className="text-left p-3 font-semibold text-slate-700">Supplier</th>
+                          <th className="text-center p-3 font-semibold text-slate-700">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -963,6 +955,24 @@ const WineDistributorApp = () => {
                               <td className="p-3 text-right font-semibold text-rose-600">${calc.frontlinePrice}</td>
                               <td className="p-3 text-right font-bold text-rose-700">${frontlineCase}</td>
                               <td className="p-3 text-slate-500 text-xs">{product.supplier}</td>
+                              <td className="p-3">
+                                <div className="flex items-center justify-center space-x-2">
+                                  <button
+                                    onClick={() => setEditingProduct(product)}
+                                    className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                                    title="Edit Product"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteConfirmation({ id: product.id, name: `${product.producer} - ${product.productName}`, type: 'product' })}
+                                    className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                                    title="Delete Product"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
@@ -1069,9 +1079,22 @@ const WineDistributorApp = () => {
                             </div>
                             <div className="text-right">
                               <p className="text-lg font-bold text-rose-600">${order.total}</p>
-                              <span className="inline-block px-3 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-                                {order.status}
-                              </span>
+                              <select
+                                value={order.status}
+                                onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                                className={`mt-1 px-3 py-1 text-xs rounded-full font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer ${order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                  order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                                    order.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-yellow-100 text-yellow-800'
+                                  }`}
+                              >
+                                <option value="pending">pending</option>
+                                <option value="confirmed">confirmed</option>
+                                <option value="shipped">shipped</option>
+                                <option value="delivered">delivered</option>
+                                <option value="completed">completed</option>
+                                <option value="cancelled">cancelled</option>
+                              </select>
                             </div>
                           </div>
                           <div className="text-sm text-slate-600">
@@ -1545,7 +1568,173 @@ const WineDistributorApp = () => {
               </div>
             )
           }
-        </div >
+
+          {/* Edit Product Modal */}
+          {editingProduct && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                  <h2 className="text-xl font-bold text-slate-800">Edit Product</h2>
+                  <button onClick={() => setEditingProduct(null)} className="p-2 hover:bg-slate-200 rounded-lg transition-colors">
+                    <X className="w-5 h-5 text-slate-500" />
+                  </button>
+                </div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleUpdateProduct(editingProduct);
+                  }}
+                  className="p-6 space-y-4"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Item Code</label>
+                      <input
+                        type="text"
+                        value={editingProduct.itemCode}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, itemCode: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Producer</label>
+                      <input
+                        type="text"
+                        value={editingProduct.producer}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, producer: e.target.value })}
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Product Name</label>
+                      <input
+                        type="text"
+                        value={editingProduct.productName}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, productName: e.target.value })}
+                        required
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Vintage</label>
+                      <input
+                        type="text"
+                        value={editingProduct.vintage}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, vintage: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Product Type</label>
+                      <select
+                        value={editingProduct.productType}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, productType: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      >
+                        <option value="Wine">Wine</option>
+                        <option value="Spirits">Spirits</option>
+                        <option value="Non-Alcoholic">Non-Alcoholic</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Bottle Size</label>
+                      <input
+                        type="text"
+                        value={editingProduct.bottleSize}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, bottleSize: e.target.value })}
+                        placeholder="e.g. 750ml"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Pack Size</label>
+                      <input
+                        type="number"
+                        value={editingProduct.packSize}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, packSize: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">FOB Case Price ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editingProduct.fobCasePrice}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, fobCasePrice: parseFloat(e.target.value) || 0 })}
+                        required
+                        className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none font-bold text-lg"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Frontline and SRP prices will be recalculated based on formulas.</p>
+                    </div>
+                  </div>
+                  <div className="pt-6 border-t border-slate-100 flex space-x-3">
+                    <button
+                      type="submit"
+                      className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold hover:bg-rose-700 transition-colors shadow-lg"
+                    >
+                      Save Changes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingProduct(null)}
+                      className="flex-1 bg-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-300 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Delete Confirmation Modal */}
+          {deleteConfirmation && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <div className="flex items-center text-red-600 mb-4">
+                  <Trash2 className="w-8 h-8 mr-3" />
+                  <h2 className="text-xl font-bold">Confirm Delete</h2>
+                </div>
+                <p className="text-slate-600 mb-6">
+                  {deleteConfirmation.type === 'reset'
+                    ? 'CRITICAL ACTION: This will permanently DELETE all products, orders, discontinued items, and reset all pricing formulas. This cannot be undone.'
+                    : `Are you sure you want to delete "${deleteConfirmation.name}"? This action cannot be undone.`}
+                </p>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={async () => {
+                      if (deleteConfirmation.type === 'reset') {
+                        try {
+                          await window.storage.delete('wine-products');
+                          await window.storage.delete('wine-orders');
+                          await window.storage.delete('wine-discontinued');
+                          await window.storage.delete('wine-formulas');
+                          window.location.reload();
+                        } catch (e) {
+                          alert('Error resetting data');
+                        }
+                      } else {
+                        deleteProduct(deleteConfirmation.id);
+                      }
+                    }}
+                    id="confirm-delete-btn"
+                    className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg"
+                  >
+                    Yes, Delete
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirmation(null)}
+                    className="flex-1 bg-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div >
     );
   }
@@ -1565,7 +1754,7 @@ const WineDistributorApp = () => {
             <button
               onClick={() => setShowList(!showList)}
               className="relative p-2 hover:bg-rose-50 rounded-lg transition-colors"
-              title="View Special Order List"
+              title="View List"
             >
               <ClipboardList className="w-6 h-6 text-slate-700" />
               {specialOrderList.length > 0 && (
@@ -1597,112 +1786,71 @@ const WineDistributorApp = () => {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search by producer, product, vintage, or supplier..."
+                  placeholder="Search products..."
                   className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
               </div>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Supplier</label>
               <select
                 value={selectedSupplier}
                 onChange={(e) => setSelectedSupplier(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white"
               >
                 <option value="all">All Suppliers</option>
-                {suppliers.map(supplier => (
-                  <option key={supplier} value={supplier}>{supplier}</option>
-                ))}
+                {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
           </div>
         </div>
 
-        {/* Products Grid */}
-        {filteredProducts.length === 0 ? (
-          <div className="bg-white/80 backdrop-blur-sm rounded-xl p-12 text-center shadow-lg border border-amber-200/50">
-            <Package className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500 text-lg">No products found</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProducts.map(product => {
-              // Recalculate to show current formula values
-              const calc = calculateFrontlinePrice(product);
-
-              return (
-                <div key={product.id} className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-amber-200/50 hover:shadow-xl transition-shadow">
-                  <div className="mb-4">
-                    <a
-                      href={getProductLink(product)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block group cursor-pointer"
-                    >
-                      <h3 className="font-bold text-lg text-slate-800 mb-1 group-hover:text-rose-600 transition-colors">
-                        {product.producer}
-                      </h3>
-                      <p className="text-slate-600 group-hover:text-rose-500 transition-colors">
-                        {product.productName}
-                      </p>
-                    </a>
-                    {product.vintage && (
-                      <p className="text-sm text-slate-500 mt-1">Vintage: {product.vintage}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 text-sm text-slate-600 mb-4">
-                    <p><span className="font-medium">Type:</span> {product.productType} <span className="text-xs text-purple-600">({calc.formulaUsed})</span></p>
-                    <p><span className="font-medium">Size:</span> {product.bottleSize} × {product.packSize}</p>
-                    {product.itemCode && <p><span className="font-medium">Code:</span> {product.itemCode}</p>}
-                    <p className="text-xs text-slate-400"><span className="font-medium">Supplier:</span> {product.supplier}</p>
-
-                  </div>
-
-                  <div className="flex justify-between items-center pt-4 border-t border-slate-200">
-                    <div>
-                      <p className="text-2xl font-bold text-rose-600">${calc.frontlinePrice}</p>
-                      <p className="text-xs text-slate-500">per bottle</p>
-                    </div>
-                    <button
-                      onClick={() => addToList({ ...product, ...calc })}
-                      className="px-4 py-2 bg-gradient-to-r from-rose-600 to-rose-700 text-white rounded-lg hover:from-rose-700 hover:to-rose-800 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
-                    >
-                      Add to List
-                    </button>
-                  </div>
+        {/* Product Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProducts.map(product => {
+            const calc = calculateFrontlinePrice(product);
+            return (
+              <div key={product.id} className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-amber-200/50 hover:shadow-xl transition-all">
+                <div className="mb-4">
+                  <h3 className="font-bold text-lg text-slate-800">{product.producer}</h3>
+                  <p className="text-slate-600">{product.productName}</p>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div className="space-y-2 text-sm text-slate-600 mb-6">
+                  <p><span className="font-medium">Size:</span> {product.bottleSize} | {product.packSize}pk</p>
+                  <p className="text-xs uppercase opacity-75">{product.supplier}</p>
+                </div>
+                <div className="flex justify-between items-center pt-4 border-t border-slate-200">
+                  <div>
+                    <p className="text-2xl font-bold text-rose-600">${calc.frontlinePrice}</p>
+                    <p className="text-xs text-slate-500">per bottle</p>
+                  </div>
+                  <button
+                    onClick={() => addToList({ ...product, ...calc })}
+                    className="px-4 py-2 bg-gradient-to-r from-rose-600 to-rose-700 text-white rounded-lg hover:from-rose-700 hover:to-rose-800 shadow-md transform hover:-translate-y-0.5 transition-all"
+                  >
+                    Add to List
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Special Order List Sidebar */}
       {showList && (
         <div className="fixed inset-0 bg-black/50 z-50" onClick={closeSidebar}>
-          <div
-            className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-slate-800">
-                  {selectedCustomerForList ? `${selectedCustomerForList}'s List` : 'Your List'}
-                </h2>
-                <button
-                  onClick={closeSidebar}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
+                <h2 className="text-2xl font-bold text-slate-800">{selectedCustomerForList ? `${selectedCustomerForList}'s List` : 'Your List'}</h2>
+                <button onClick={closeSidebar} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><X className="w-6 h-6" /></button>
               </div>
 
               {specialOrderList.length === 0 ? (
                 <div className="text-center py-12">
                   <ClipboardList className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">Your special order list is empty</p>
+                  <p className="text-slate-500">Your list is empty</p>
                 </div>
               ) : (
                 <>
@@ -1713,91 +1861,18 @@ const WineDistributorApp = () => {
                           <div className="flex-1">
                             <p className="font-semibold text-slate-800">{item.producer}</p>
                             <p className="text-sm text-slate-600">{item.productName}</p>
-                            <p className="text-xs text-slate-400 mt-1">
-                              ${item.frontlinePrice}/btl | Pack: {item.packSize} (${(parseFloat(item.frontlinePrice) * (parseInt(item.packSize) || 12)).toFixed(2)}/cs)
-                            </p>
+                            <p className="text-xs text-slate-400 mt-1">${item.frontlinePrice}/btl</p>
                           </div>
-                          <button
-                            onClick={() => removeFromList(item.id)}
-                            className="text-red-500 hover:text-red-700 ml-2"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
+                          <button onClick={() => removeFromList(item.id)} className="text-red-500 ml-2"><X className="w-5 h-5" /></button>
                         </div>
-
                         <div className="grid grid-cols-2 gap-4 mt-4">
-                          <div>
-                            <label className="text-xs text-slate-500 block mb-1 font-medium">Cases</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.cases}
-                              onChange={(e) => updateListUnits(item.id, 'cases', e.target.value)}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent outline-none transition-all"
-                              placeholder="0"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs text-slate-500 block mb-1 font-medium">Bottles</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={item.bottles}
-                              onChange={(e) => updateListUnits(item.id, 'bottles', e.target.value)}
-                              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent outline-none transition-all"
-                              placeholder="0"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex justify-between items-center text-sm border-t border-slate-50 pt-2">
-                          <span className="text-slate-500">Total Bottles: {item.quantity}</span>
-                          <p className="font-bold text-rose-600">
-                            ${(parseFloat(item.frontlinePrice) * item.quantity).toFixed(2)}
-                          </p>
+                          <input type="number" min="0" value={item.cases} onChange={(e) => updateListUnits(item.id, 'cases', e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="Cases" />
+                          <input type="number" min="0" value={item.bottles} onChange={(e) => updateListUnits(item.id, 'bottles', e.target.value)} className="w-full px-3 py-2 border rounded-lg" placeholder="Bottles" />
                         </div>
                       </div>
                     ))}
                   </div>
-
-                  <div className="border-t border-slate-200 pt-4 mb-6">
-                    <div className="flex justify-between items-center text-lg font-bold mb-4">
-                      <span>Total:</span>
-                      <span className="text-rose-600">
-                        ${specialOrderList.reduce((sum, item) => sum + (parseFloat(item.frontlinePrice) * item.quantity), 0).toFixed(2)}
-                      </span>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Ideal Delivery Date</label>
-                        <input
-                          type="date"
-                          min={new Date().toISOString().split('T')[0]}
-                          value={idealDeliveryDate}
-                          onChange={(e) => setIdealDeliveryDate(e.target.value)}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Must Have By Date</label>
-                        <input
-                          type="date"
-                          min={new Date().toISOString().split('T')[0]}
-                          value={mustHaveByDate}
-                          onChange={(e) => setMustHaveByDate(e.target.value)}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={submitListUpdate}
-                    className="w-full py-4 bg-gradient-to-r from-rose-600 to-rose-700 text-white rounded-xl font-semibold hover:from-rose-700 hover:to-rose-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                  >
-                    Submit Updates
-                  </button>
+                  <button onClick={submitListUpdate} className="w-full py-4 bg-rose-600 text-white rounded-xl font-semibold">Submit Updates</button>
                 </>
               )}
             </div>
