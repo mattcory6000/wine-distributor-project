@@ -35,6 +35,8 @@ const WineDistributorApp = () => {
   const [selectedSupplier, setSelectedSupplier] = useState('all');
   const [cart, setCart] = useState([]);
   const [showCart, setShowCart] = useState(false);
+  const [idealDeliveryDate, setIdealDeliveryDate] = useState('');
+  const [mustHaveByDate, setMustHaveByDate] = useState('');
   const [uploadStatus, setUploadStatus] = useState('');
   const [pendingUpload, setPendingUpload] = useState(null);
   const [columnMapping, setColumnMapping] = useState(null);
@@ -533,12 +535,16 @@ const WineDistributorApp = () => {
       items: cart,
       total: cart.reduce((sum, item) => sum + (parseFloat(item.frontlinePrice) * item.quantity), 0).toFixed(2),
       status: 'pending',
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      idealDeliveryDate: idealDeliveryDate,
+      mustHaveByDate: mustHaveByDate
     };
 
     const updatedOrders = [...orders, order];
     await saveOrders(updatedOrders);
     setCart([]);
+    setIdealDeliveryDate('');
+    setMustHaveByDate('');
     setShowCart(false);
     alert('Order placed successfully! Your rep will be in touch.');
   };
@@ -570,6 +576,8 @@ const WineDistributorApp = () => {
           'Bottles Ordered': item.bottles || 0,
           'Total Bottles': item.quantity,
           'Item Total': (parseFloat(item.frontlinePrice) * item.quantity).toFixed(2),
+          'Ideal Delivery Date': order.idealDeliveryDate ? new Date(order.idealDeliveryDate).toLocaleDateString() : '',
+          'Must Have By Date': order.mustHaveByDate ? new Date(order.mustHaveByDate).toLocaleDateString() : '',
           'Order Total': order.total
         });
       });
@@ -1529,11 +1537,34 @@ const WineDistributorApp = () => {
                   </div>
 
                   <div className="border-t border-slate-200 pt-4 mb-6">
-                    <div className="flex justify-between items-center text-lg font-bold">
+                    <div className="flex justify-between items-center text-lg font-bold mb-4">
                       <span>Total:</span>
                       <span className="text-rose-600">
                         ${cart.reduce((sum, item) => sum + (parseFloat(item.frontlinePrice) * item.quantity), 0).toFixed(2)}
                       </span>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Ideal Delivery Date</label>
+                        <input
+                          type="date"
+                          min={new Date().toISOString().split('T')[0]}
+                          value={idealDeliveryDate}
+                          onChange={(e) => setIdealDeliveryDate(e.target.value)}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Must Have By Date</label>
+                        <input
+                          type="date"
+                          min={new Date().toISOString().split('T')[0]}
+                          value={mustHaveByDate}
+                          onChange={(e) => setMustHaveByDate(e.target.value)}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500"
+                        />
+                      </div>
                     </div>
                   </div>
 
