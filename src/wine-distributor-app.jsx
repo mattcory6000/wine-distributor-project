@@ -59,6 +59,7 @@ const WineDistributorApp = () => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id, name }
   const [originalAdmin, setOriginalAdmin] = useState(null); // For "Login As" functionality
+  const [selectedExtraFields, setSelectedExtraFields] = useState([]); // Extra columns to import
 
   const toggleSection = (section) => {
     setCollapsedSections(prev => ({
@@ -425,6 +426,7 @@ const WineDistributorApp = () => {
     }
 
     setUploadStatus('Reading file...');
+    setSelectedExtraFields([]);
     console.log('Upload status set');
 
     try {
@@ -478,9 +480,17 @@ const WineDistributorApp = () => {
                 bottleSize: findColumnIndex(headers, ['bottle', 'bottle size', 'size', 'ml', 'volume']),
                 productType: findColumnIndex(headers, ['type', 'category', 'product type', 'class']),
                 fobCasePrice: findColumnIndex(headers, ['fob', 'price', 'case price', 'cost', 'wholesale']),
-                productLink: findColumnIndex(headers, ['link', 'url', 'website', 'info'])
+                productLink: findColumnIndex(headers, ['link', 'url', 'website', 'info']),
+                country: findColumnIndex(headers, ['country', 'nation', 'pays']),
+                region: findColumnIndex(headers, ['region', 'area', 'district']),
+                appellation: findColumnIndex(headers, ['appellation', 'ava', 'doc', 'docg', 'aoc'])
               };
             }
+
+            const mappedIndices = new Set(Object.values(autoMapping));
+            const unmapped = headers
+              .map((h, i) => ({ name: h, index: i }))
+              .filter(h => h.name && h.name.trim() && !mappedIndices.has(h.index));
 
             setPendingUpload({
               file,
@@ -488,7 +498,8 @@ const WineDistributorApp = () => {
               data: jsonData,
               autoMapping,
               supplierName: cleanSupplierName,
-              hasTemplate: !!savedTemplate
+              hasTemplate: !!savedTemplate,
+              unmappedHeaders: unmapped
             });
 
             setColumnMapping(autoMapping);
@@ -536,9 +547,17 @@ const WineDistributorApp = () => {
               bottleSize: findColumnIndex(headers, ['bottle', 'bottle size', 'size', 'ml', 'volume']),
               productType: findColumnIndex(headers, ['type', 'category', 'product type', 'class']),
               fobCasePrice: findColumnIndex(headers, ['fob', 'price', 'case price', 'cost', 'wholesale']),
-              productLink: findColumnIndex(headers, ['link', 'url', 'website', 'info'])
+              productLink: findColumnIndex(headers, ['link', 'url', 'website', 'info']),
+              country: findColumnIndex(headers, ['country', 'nation', 'pays']),
+              region: findColumnIndex(headers, ['region', 'area', 'district']),
+              appellation: findColumnIndex(headers, ['appellation', 'ava', 'doc', 'docg', 'aoc'])
             };
           }
+
+          const mappedIndices = new Set(Object.values(autoMapping));
+          const unmapped = headers
+            .map((h, i) => ({ name: h, index: i }))
+            .filter(h => h.name && h.name.trim() && !mappedIndices.has(h.index));
 
           setPendingUpload({
             file,
@@ -546,7 +565,8 @@ const WineDistributorApp = () => {
             data: jsonData,
             autoMapping,
             supplierName: cleanSupplierName,
-            hasTemplate: !!savedTemplate
+            hasTemplate: !!savedTemplate,
+            unmappedHeaders: unmapped
           });
 
           setColumnMapping(autoMapping);
@@ -603,6 +623,7 @@ const WineDistributorApp = () => {
         const row = data[i];
         if (!row || row.length === 0) continue;
 
+        // Map standard fields
         const product = {
           id: `prod-${Date.now()}-${i}`,
           itemCode: columnMapping.itemCode >= 0 ? String(row[columnMapping.itemCode] || '') : '',
@@ -614,9 +635,22 @@ const WineDistributorApp = () => {
           productType: columnMapping.productType >= 0 ? String(row[columnMapping.productType] || '') : '',
           fobCasePrice: columnMapping.fobCasePrice >= 0 ? parseFloat(row[columnMapping.fobCasePrice]) || 0 : 0,
           productLink: columnMapping.productLink >= 0 ? String(row[columnMapping.productLink] || '') : '',
+          country: columnMapping.country >= 0 ? String(row[columnMapping.country] || '') : '',
+          region: columnMapping.region >= 0 ? String(row[columnMapping.region] || '') : '',
+          appellation: columnMapping.appellation >= 0 ? String(row[columnMapping.appellation] || '') : '',
           supplier: supplierName,
           uploadDate: new Date().toISOString()
         };
+
+        // Inject selected extra fields
+        selectedExtraFields.forEach(field => {
+          const value = row[field.index];
+          if (value !== undefined && value !== null && value !== '') {
+            // Keep original name but sanitize for JS property access if needed
+            // Actually, we can use the name directly for display later
+            product[field.name] = value;
+          }
+        });
 
         // Validation warnings
         if (!product.fobCasePrice || product.fobCasePrice === 0) {
@@ -999,7 +1033,10 @@ const WineDistributorApp = () => {
       product.producer?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.vintage?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.supplier?.toLowerCase().includes(searchTerm.toLowerCase());
+      product.supplier?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.country?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.region?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.appellation?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesSupplier = selectedSupplier === 'all' || product.supplier === selectedSupplier;
 
@@ -1708,9 +1745,36 @@ const WineDistributorApp = () => {
                                 </td>
                                 <td className="py-5 px-4">
                                   <p className="text-sm font-bold text-slate-900 leading-tight">{product.producer}</p>
-                                  <p className="text-[10px] text-slate-400 font-medium uppercase mt-1">{product.supplier}</p>
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                                    <p className="text-[10px] text-slate-400 font-medium uppercase">{product.supplier}</p>
+                                    {(product.country || product.region) && (
+                                      <>
+                                        <span className="text-slate-200">•</span>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+                                          {product.country}{product.region ? `, ${product.region}` : ''}
+                                        </p>
+                                      </>
+                                    )}
+                                  </div>
                                 </td>
-                                <td className="py-5 px-4 text-sm font-medium text-slate-700">{product.productName}</td>
+                                <td className="py-5 px-4">
+                                  <div className="text-sm font-medium text-slate-700">{product.productName}</div>
+                                  {product.appellation && (
+                                    <p className="text-[10px] text-slate-400 font-bold italic mt-1 uppercase tracking-tight">{product.appellation}</p>
+                                  )}
+                                  {/* Dynamic Extra Fields Display */}
+                                  <div className="flex flex-wrap gap-1.5 mt-2">
+                                    {Object.entries(product).map(([key, value]) => {
+                                      const standardFields = ['id', 'itemCode', 'producer', 'productName', 'vintage', 'packSize', 'bottleSize', 'productType', 'fobCasePrice', 'productLink', 'supplier', 'uploadDate', 'frontlinePrice', 'frontlineCase', 'srp', 'whlsBottle', 'whlsCase', 'laidIn', 'formulaUsed', 'country', 'region', 'appellation'];
+                                      if (standardFields.includes(key) || !value || typeof value === 'object') return null;
+                                      return (
+                                        <span key={key} className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tight bg-slate-100 text-slate-500 border border-slate-200/50 shadow-sm">
+                                          <span className="text-slate-400 mr-1.5">{key}:</span> {String(value)}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                </td>
                                 <td className="py-5 px-4 text-sm font-bold text-slate-500 tracking-tight">{product.vintage || 'NV'}</td>
                                 <td className="py-5 px-4">
                                   <div className="text-xs font-medium text-slate-600">
@@ -2200,6 +2264,47 @@ const WineDistributorApp = () => {
                     ))}
                   </div>
 
+
+                  {/* Additional Content Discovery */}
+                  {pendingUpload.unmappedHeaders && pendingUpload.unmappedHeaders.length > 0 && (
+                    <div className="mb-10 p-8 bg-amber-50/30 border border-amber-100/50 rounded-3xl">
+                      <div className="flex items-center space-x-3 mb-6">
+                        <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center">
+                          <Plus className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Potential Additional Content</h3>
+                          <p className="text-[10px] text-slate-500 font-medium">We found columns that aren't part of the standard catalog. Want to include them?</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-3">
+                        {pendingUpload.unmappedHeaders.map((header) => (
+                          <label
+                            key={header.index}
+                            className={`flex items-center space-x-3 px-4 py-3 rounded-2xl border transition-all cursor-pointer ${selectedExtraFields.find(f => f.index === header.index)
+                              ? 'bg-amber-100 border-amber-200 text-amber-900 shadow-sm'
+                              : 'bg-white border-slate-100 text-slate-500 hover:border-amber-100'
+                              }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                              checked={!!selectedExtraFields.find(f => f.index === header.index)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedExtraFields([...selectedExtraFields, header]);
+                                } else {
+                                  setSelectedExtraFields(selectedExtraFields.filter(f => f.index !== header.index));
+                                }
+                              }}
+                            />
+                            <span className="text-[11px] font-black uppercase tracking-widest">{header.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Preview Section */}
                   <div className="mb-10 border-t border-slate-50 pt-10">
                     <h3 className="text-[10px] font-black text-rose-500 uppercase tracking-[0.2em] mb-6 flex items-center">
@@ -2549,6 +2654,18 @@ const WineDistributorApp = () => {
                         <span className="text-[11px] font-mono text-slate-300">{product.itemCode}</span>
                       </div>
                       <h3 className="font-extrabold text-2xl text-slate-900 tracking-tight leading-tight group-hover:text-rose-600 transition-colors uppercase">{product.producer}</h3>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 mb-2">
+                        <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest">{product.supplier}</p>
+                        {(product.country || product.region) && (
+                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-tight">
+                            <span className="text-slate-200 mx-1.5">•</span>
+                            {product.country}{product.region ? ` / ${product.region}` : ''}
+                          </p>
+                        )}
+                      </div>
+                      {product.appellation && (
+                        <p className="text-[11px] text-slate-500 font-bold italic uppercase tracking-tighter mb-2">{product.appellation}</p>
+                      )}
                       {product.productLink ? (
                         <a
                           href={product.productLink.startsWith('http') ? product.productLink : `https://${product.productLink}`}
@@ -2562,6 +2679,19 @@ const WineDistributorApp = () => {
                       ) : (
                         <p className="text-slate-500 font-medium mt-1 leading-relaxed">{product.productName}</p>
                       )}
+
+                      {/* Dynamic Extra Fields Display */}
+                      <div className="flex flex-wrap gap-1.5 mt-4">
+                        {Object.entries(product).map(([key, value]) => {
+                          const standardFields = ['id', 'itemCode', 'producer', 'productName', 'vintage', 'packSize', 'bottleSize', 'productType', 'fobCasePrice', 'productLink', 'supplier', 'uploadDate', 'frontlinePrice', 'frontlineCase', 'srp', 'whlsBottle', 'whlsCase', 'laidIn', 'formulaUsed', 'country', 'region', 'appellation'];
+                          if (standardFields.includes(key) || !value || typeof value === 'object') return null;
+                          return (
+                            <span key={key} className="inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight bg-slate-50 text-slate-400 border border-slate-100 shadow-sm">
+                              <span className="text-slate-300 mr-2">{key}:</span> <span className="text-slate-600">{String(value)}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     <div className="mt-8 pt-6 border-t border-slate-50 flex flex-col gap-6">
