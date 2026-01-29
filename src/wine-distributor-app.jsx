@@ -590,7 +590,8 @@ const WineDistributorApp = () => {
         bottles: 0,
         quantity: packSize,
         status: 'Requested',
-        notes: ''
+        notes: '',
+        submitted: false
       }];
 
       const updatedAllLists = {
@@ -690,7 +691,18 @@ const WineDistributorApp = () => {
     };
 
     const updatedOrders = [...orders, orderSnapshot];
+
+    // Mark items as submitted in the persistent list
+    const submittedList = currentItems.map(item => ({ ...item, submitted: true }));
+    const updatedAllLists = {
+      ...allCustomerLists,
+      [username]: submittedList
+    };
+
     await saveOrders(updatedOrders);
+    await saveSpecialOrderLists(updatedAllLists);
+    setAllCustomerLists(updatedAllLists);
+    setSpecialOrderList(submittedList);
 
     // We don't clear the list anymore, it's ongoing
     setIdealDeliveryDate('');
@@ -1073,6 +1085,249 @@ const WineDistributorApp = () => {
               </div>
             </div>
 
+            {/* Customer Special Order Lists */}
+            <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
+              <div
+                className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
+                onClick={() => toggleSection('customerLists')}
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.customerLists ? 'bg-slate-100' : 'bg-rose-50'}`}>
+                  {collapsedSections.customerLists ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
+                </div>
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Active Customer Lists</h2>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Special order requests by establishment</p>
+                </div>
+              </div>
+
+              {!collapsedSections.customerLists && (
+                <div className="animate-in fade-in duration-500">
+                  {Object.keys(allCustomerLists).filter(user => allCustomerLists[user].length > 0).length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200">
+                      <ClipboardList className="w-12 h-12 text-slate-300 mb-4" />
+                      <p className="text-slate-500 font-medium tracking-tight">No active customer lists currently.</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col space-y-3">
+                      {Object.entries(allCustomerLists)
+                        .filter(([_, items]) => items.length > 0)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([username, items]) => {
+                          const total = items.reduce((sum, item) => sum + (parseFloat(item.frontlinePrice) * item.quantity), 0).toFixed(2);
+                          return (
+                            <div
+                              key={username}
+                              className="bg-white border border-slate-100 rounded-2xl px-6 py-4 hover:border-rose-200 hover:shadow-[0_4px_20px_rgb(0,0,0,0.03)] transition-all duration-200 cursor-pointer group flex items-center justify-between"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCustomerForList(username);
+                                setSpecialOrderList(items);
+                                setShowList(true);
+                              }}
+                            >
+                              <div className="flex items-center space-x-4 flex-1">
+                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 group-hover:bg-rose-50 group-hover:border-rose-100 transition-colors duration-200">
+                                  <UserCheck className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors duration-200" />
+                                </div>
+                                <div>
+                                  <h3 className="font-extrabold text-slate-900 uppercase tracking-tight text-sm group-hover:text-rose-600 transition-colors">{username}</h3>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{items.length} item(s) pending</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center space-x-8">
+                                <div className="text-right">
+                                  <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-0.5">Est. Total</p>
+                                  <p className="text-base font-black text-slate-900 tracking-tight font-mono">${total}</p>
+                                </div>
+                                <div className="p-2 text-slate-200 group-hover:text-rose-400 transition-colors">
+                                  <ChevronRight className="w-5 h-5" />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Supplier and Upload Management */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+              {/* Supplier Management */}
+              <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 flex flex-col h-full">
+                <div
+                  className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
+                  onClick={() => toggleSection('suppliers')}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.suppliers ? 'bg-slate-100' : 'bg-rose-50'}`}>
+                    {collapsedSections.suppliers ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Suppliers</h2>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Distributor network management</p>
+                  </div>
+                </div>
+
+                {!collapsedSections.suppliers && (
+                  <div className="animate-in fade-in duration-500 overflow-y-auto max-h-[400px] flex-grow pr-2">
+                    {suppliers.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200">
+                        <Users className="w-10 h-10 text-slate-300 mb-3" />
+                        <p className="text-slate-400 text-sm font-medium">No distributors mapped yet.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {suppliers.map(supplier => {
+                          const supplierProducts = products.filter(p => p.supplier === supplier);
+                          const latestUpload = supplierProducts.length > 0
+                            ? new Date(Math.max(...supplierProducts.map(p => new Date(p.uploadDate)))).toLocaleDateString()
+                            : 'Unknown';
+
+                          return (
+                            <div key={supplier} className="flex justify-between items-center p-5 bg-slate-50/30 rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all duration-200 group">
+                              <div>
+                                <p className="font-extrabold text-slate-800 text-sm tracking-tight uppercase">{supplier}</p>
+                                <div className="flex items-center space-x-3 mt-1.5">
+                                  <span className="text-[10px] font-bold text-slate-400 bg-white border border-slate-100 px-2 py-0.5 rounded-full">{supplierProducts.length} items</span>
+                                  <span className="text-[10px] font-bold text-slate-300">Updated: {latestUpload}</span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm(`Remove all items for ${supplier}? This cannot be undone.`)) {
+                                    const updatedProducts = products.filter(p => p.supplier !== supplier);
+                                    await saveProducts(updatedProducts);
+                                  }
+                                }}
+                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all border border-transparent hover:border-rose-100"
+                                title="Delete Supplier"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Upload Section */}
+              <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 flex flex-col h-full">
+                <div
+                  className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
+                  onClick={() => toggleSection('upload')}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.upload ? 'bg-slate-100' : 'bg-rose-50'}`}>
+                    {collapsedSections.upload ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Import Engine</h2>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Process Excel or PDF price lists</p>
+                  </div>
+                </div>
+
+                {!collapsedSections.upload && (
+                  <div className="animate-in fade-in duration-500 flex flex-col items-center justify-center flex-grow py-8 border-2 border-dashed border-slate-200 rounded-3xl px-8 text-center hover:border-rose-300 hover:bg-rose-50/10 transition-all duration-300">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.pdf"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      id="file-upload"
+                    />
+                    <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-6 shadow-sm border border-rose-100/50">
+                      <FileSpreadsheet className="w-8 h-8 text-rose-600" />
+                    </div>
+                    <h3 className="text-lg font-extrabold text-slate-900 tracking-tight mb-2">Drop List Here</h3>
+                    <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed mb-6 px-10">Supporting .xlsx, .xls, and PDF formats for automatic extraction</p>
+                    <button
+                      onClick={() => document.getElementById('file-upload')?.click()}
+                      className="w-full bg-[#1a1a1a] text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all duration-200 flex items-center justify-center space-x-3 active:scale-[0.98] shadow-lg shadow-slate-200"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Select Local File</span>
+                    </button>
+
+                    {uploadStatus && (
+                      <div className={`mt-6 w-full p-4 rounded-2xl border text-[11px] font-bold uppercase tracking-tight ${uploadStatus.includes('Error') || uploadStatus.includes('failed')
+                        ? 'bg-rose-50 text-rose-700 border-rose-100'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                        }`}>
+                        {uploadStatus}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Louis Dressner PDF Converter Section */}
+            <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
+              <div
+                className="flex items-center mb-6 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
+                onClick={() => toggleSection('dressner')}
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.dressner ? 'bg-slate-100' : 'bg-purple-50'}`}>
+                  {collapsedSections.dressner ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-purple-600" />}
+                </div>
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">External PDF Pipeline</h2>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Louis Dressner protocol converters</p>
+                </div>
+              </div>
+
+              {!collapsedSections.dressner && (
+                <div className="animate-in fade-in duration-500 space-y-8">
+                  <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl">
+                    <p className="text-xs text-indigo-700 font-medium leading-relaxed">
+                      <span className="font-bold">Automated Protocol:</span> For Louis Dressner source PDFs, use the satellite converters below to generate a compatible schema, then upload the resulting file to the primary dropzone.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-white rounded-2xl p-6 border border-slate-100 hover:border-purple-200 hover:shadow-sm transition-all duration-300 group">
+                      <h3 className="text-sm font-extrabold text-slate-900 mb-2 flex items-center">
+                        <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
+                        Desktop Satellite (macOS)
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-medium mb-6">Drop-target application for high-volume conversion</p>
+                      <a
+                        href="/api/placeholder/download/mac-app"
+                        className="inline-flex items-center space-x-2 px-5 py-2.5 bg-purple-50 text-purple-700 border border-purple-100 rounded-xl font-bold text-xs hover:bg-purple-600 hover:text-white transition-all duration-300 shadow-sm"
+                        download="louis_dressner_converter_mac.py"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download Satellite App</span>
+                      </a>
+                    </div>
+
+                    <div className="bg-white rounded-2xl p-6 border border-slate-100 hover:border-purple-200 hover:shadow-sm transition-all duration-300 group">
+                      <h3 className="text-sm font-extrabold text-slate-900 mb-2 flex items-center">
+                        <div className="w-2 h-2 bg-slate-400 rounded-full mr-2"></div>
+                        Terminal CLI Utility
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-medium mb-4">Python-based command line interface</p>
+                      <code className="text-[10px] bg-slate-900 text-slate-300 p-3 rounded-xl block mb-6 font-mono leading-relaxed">
+                        python3 convert.py source.pdf output.xlsx
+                      </code>
+                      <a
+                        href="/api/placeholder/download/python-script"
+                        className="inline-flex items-center space-x-2 px-5 py-2.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all duration-300"
+                        download="convert_louis_dressner_pdf.py"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Download CLI Source</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Product Catalog - Admin View with Pricing */}
             <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
               <div
@@ -1196,72 +1451,6 @@ const WineDistributorApp = () => {
               )}
             </div>
 
-            {/* Customer Special Order Lists */}
-            <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
-              <div
-                className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
-                onClick={() => toggleSection('customerLists')}
-              >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.customerLists ? 'bg-slate-100' : 'bg-rose-50'}`}>
-                  {collapsedSections.customerLists ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
-                </div>
-                <div>
-                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Active Customer Lists</h2>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Special order requests by establishment</p>
-                </div>
-              </div>
-
-              {!collapsedSections.customerLists && (
-                <div className="animate-in fade-in duration-500">
-                  {Object.keys(allCustomerLists).filter(user => allCustomerLists[user].length > 0).length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200">
-                      <ClipboardList className="w-12 h-12 text-slate-300 mb-4" />
-                      <p className="text-slate-500 font-medium tracking-tight">No active customer lists currently.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {Object.entries(allCustomerLists)
-                        .filter(([_, items]) => items.length > 0)
-                        .map(([username, items]) => {
-                          const total = items.reduce((sum, item) => sum + (parseFloat(item.frontlinePrice) * item.quantity), 0).toFixed(2);
-                          return (
-                            <div
-                              key={username}
-                              className="bg-white border border-slate-100 rounded-3xl p-6 hover:border-rose-200 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 cursor-pointer group flex flex-col justify-between"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedCustomerForList(username);
-                                setSpecialOrderList(items);
-                                setShowList(true);
-                              }}
-                            >
-                              <div className="flex justify-between items-start mb-4">
-                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 group-hover:bg-rose-50 group-hover:border-rose-100 transition-colors duration-300">
-                                  <UserCheck className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors duration-300" />
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Estimated Total</p>
-                                  <p className="text-xl font-extrabold text-slate-900 tracking-tight group-hover:text-rose-600 transition-colors font-mono">${total}</p>
-                                </div>
-                              </div>
-
-                              <div>
-                                <h3 className="font-extrabold text-slate-900 truncate uppercase tracking-tight text-lg mb-1">{username}</h3>
-                                <p className="text-xs text-slate-500 font-medium">{items.length} item(s) pending request</p>
-                              </div>
-
-                              <div className="mt-6 pt-4 border-t border-slate-50 flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-x-2 group-hover:translate-x-0 font-sans">View Full List</span>
-                                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-rose-600 transition-colors" />
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
 
             {/* Recent Orders */}
             <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden text-slate-800">
@@ -1550,180 +1739,6 @@ const WineDistributorApp = () => {
               )}
             </div>
 
-            {/* Supplier and Upload Management */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-              {/* Supplier Management */}
-              <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 flex flex-col h-full">
-                <div
-                  className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
-                  onClick={() => toggleSection('suppliers')}
-                >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.suppliers ? 'bg-slate-100' : 'bg-rose-50'}`}>
-                    {collapsedSections.suppliers ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Suppliers</h2>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Distributor network management</p>
-                  </div>
-                </div>
-
-                {!collapsedSections.suppliers && (
-                  <div className="animate-in fade-in duration-500 overflow-y-auto max-h-[400px] flex-grow pr-2">
-                    {suppliers.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-12 bg-slate-50/30 rounded-2xl border border-dashed border-slate-200">
-                        <Users className="w-10 h-10 text-slate-300 mb-3" />
-                        <p className="text-slate-400 text-sm font-medium">No distributors mapped yet.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {suppliers.map(supplier => {
-                          const supplierProducts = products.filter(p => p.supplier === supplier);
-                          const latestUpload = supplierProducts.length > 0
-                            ? new Date(Math.max(...supplierProducts.map(p => new Date(p.uploadDate)))).toLocaleDateString()
-                            : 'Unknown';
-
-                          return (
-                            <div key={supplier} className="flex justify-between items-center p-5 bg-slate-50/30 rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all duration-200 group">
-                              <div>
-                                <p className="font-extrabold text-slate-800 text-sm tracking-tight uppercase">{supplier}</p>
-                                <div className="flex items-center space-x-3 mt-1.5">
-                                  <span className="text-[10px] font-bold text-slate-400 bg-white border border-slate-100 px-2 py-0.5 rounded-full">{supplierProducts.length} items</span>
-                                  <span className="text-[10px] font-bold text-slate-300">Updated: {latestUpload}</span>
-                                </div>
-                              </div>
-                              <button
-                                onClick={async () => {
-                                  if (window.confirm(`Remove all items for ${supplier}? This cannot be undone.`)) {
-                                    const updatedProducts = products.filter(p => p.supplier !== supplier);
-                                    await saveProducts(updatedProducts);
-                                  }
-                                }}
-                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all border border-transparent hover:border-rose-100"
-                                title="Delete Supplier"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Upload Section */}
-              <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 flex flex-col h-full">
-                <div
-                  className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
-                  onClick={() => toggleSection('upload')}
-                >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.upload ? 'bg-slate-100' : 'bg-rose-50'}`}>
-                    {collapsedSections.upload ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Import Engine</h2>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Process Excel or PDF price lists</p>
-                  </div>
-                </div>
-
-                {!collapsedSections.upload && (
-                  <div className="animate-in fade-in duration-500 flex flex-col items-center justify-center flex-grow py-8 border-2 border-dashed border-slate-200 rounded-3xl px-8 text-center hover:border-rose-300 hover:bg-rose-50/10 transition-all duration-300">
-                    <input
-                      type="file"
-                      accept=".xlsx,.xls,.pdf"
-                      onChange={handleFileUpload}
-                      className="hidden"
-                      id="file-upload"
-                    />
-                    <div className="w-16 h-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-6 shadow-sm border border-rose-100/50">
-                      <FileSpreadsheet className="w-8 h-8 text-rose-600" />
-                    </div>
-                    <h3 className="text-lg font-extrabold text-slate-900 tracking-tight mb-2">Drop List Here</h3>
-                    <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest leading-relaxed mb-6 px-10">Supporting .xlsx, .xls, and PDF formats for automatic extraction</p>
-                    <button
-                      onClick={() => document.getElementById('file-upload')?.click()}
-                      className="w-full bg-[#1a1a1a] text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all duration-200 flex items-center justify-center space-x-3 active:scale-[0.98] shadow-lg shadow-slate-200"
-                    >
-                      <Upload className="w-4 h-4" />
-                      <span>Select Local File</span>
-                    </button>
-
-                    {uploadStatus && (
-                      <div className={`mt-6 w-full p-4 rounded-2xl border text-[11px] font-bold uppercase tracking-tight ${uploadStatus.includes('Error') || uploadStatus.includes('failed')
-                        ? 'bg-rose-50 text-rose-700 border-rose-100'
-                        : 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                        }`}>
-                        {uploadStatus}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Louis Dressner PDF Converter Section */}
-            <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
-              <div
-                className="flex items-center mb-6 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
-                onClick={() => toggleSection('dressner')}
-              >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.dressner ? 'bg-slate-100' : 'bg-purple-50'}`}>
-                  {collapsedSections.dressner ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-purple-600" />}
-                </div>
-                <div>
-                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">External PDF Pipeline</h2>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Louis Dressner protocol converters</p>
-                </div>
-              </div>
-
-              {!collapsedSections.dressner && (
-                <div className="animate-in fade-in duration-500 space-y-8">
-                  <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl">
-                    <p className="text-xs text-indigo-700 font-medium leading-relaxed">
-                      <span className="font-bold">Automated Protocol:</span> For Louis Dressner source PDFs, use the satellite converters below to generate a compatible schema, then upload the resulting file to the primary dropzone.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-white rounded-2xl p-6 border border-slate-100 hover:border-purple-200 hover:shadow-sm transition-all duration-300 group">
-                      <h3 className="text-sm font-extrabold text-slate-900 mb-2 flex items-center">
-                        <div className="w-2 h-2 bg-purple-500 rounded-full mr-2"></div>
-                        Desktop Satellite (macOS)
-                      </h3>
-                      <p className="text-[11px] text-slate-500 font-medium mb-6">Drop-target application for high-volume conversion</p>
-                      <a
-                        href="/api/placeholder/download/mac-app"
-                        className="inline-flex items-center space-x-2 px-5 py-2.5 bg-purple-50 text-purple-700 border border-purple-100 rounded-xl font-bold text-xs hover:bg-purple-600 hover:text-white transition-all duration-300 shadow-sm"
-                        download="louis_dressner_converter_mac.py"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download Satellite App</span>
-                      </a>
-                    </div>
-
-                    <div className="bg-white rounded-2xl p-6 border border-slate-100 hover:border-purple-200 hover:shadow-sm transition-all duration-300 group">
-                      <h3 className="text-sm font-extrabold text-slate-900 mb-2 flex items-center">
-                        <div className="w-2 h-2 bg-slate-400 rounded-full mr-2"></div>
-                        Terminal CLI Utility
-                      </h3>
-                      <p className="text-[11px] text-slate-500 font-medium mb-4">Python-based command line interface</p>
-                      <code className="text-[10px] bg-slate-900 text-slate-300 p-3 rounded-xl block mb-6 font-mono leading-relaxed">
-                        python3 convert.py source.pdf output.xlsx
-                      </code>
-                      <a
-                        href="/api/placeholder/download/python-script"
-                        className="inline-flex items-center space-x-2 px-5 py-2.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all duration-300"
-                        download="convert_louis_dressner_pdf.py"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download CLI Source</span>
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Supplier Selection Modal */}
             {pendingUpload && showSupplierModal && (
@@ -2170,7 +2185,7 @@ const WineDistributorApp = () => {
                       onChange={(e) => setSelectedSupplier(e.target.value)}
                       className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-rose-500/5 focus:border-rose-500/50 transition-all font-bold text-sm appearance-none cursor-pointer pr-12 text-slate-700"
                     >
-                      <option value="all">All Direct Imports</option>
+                      <option value="all">All Suppliers</option>
                       {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <ChevronDown className="absolute right-5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -2209,7 +2224,7 @@ const WineDistributorApp = () => {
                     <div className="mt-8 pt-6 border-t border-slate-50 flex flex-col gap-6">
                       <div className="flex justify-between items-end">
                         <div>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Estate Pricing</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Frontline Price</p>
                           <div className="flex items-baseline space-x-1">
                             <span className="text-3xl font-black text-slate-900 tracking-tighter">${calc.frontlinePrice}</span>
                             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">/ btl</span>
@@ -2275,12 +2290,14 @@ const WineDistributorApp = () => {
                           <p className="text-sm text-slate-500 font-medium mt-0.5">{item.productName}</p>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">${item.frontlinePrice} / unit frontline</p>
                         </div>
-                        <button
-                          onClick={() => removeFromList(item.id)}
-                          className="p-3 bg-slate-50 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-transparent group-hover:bg-rose-50 group-hover:border-rose-100 shadow-sm"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                        {(!item.submitted || currentUser.type === 'admin') && (
+                          <button
+                            onClick={() => removeFromList(item.id)}
+                            className="p-3 bg-slate-50 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-transparent group-hover:bg-rose-50 group-hover:border-rose-100 shadow-sm"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-6 mb-8">
@@ -2291,7 +2308,8 @@ const WineDistributorApp = () => {
                             min="0"
                             value={item.cases}
                             onChange={(e) => updateListUnits(item.id, 'cases', e.target.value)}
-                            className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-mono font-black text-slate-900"
+                            disabled={item.submitted && currentUser.type === 'customer'}
+                            className={`w-full px-5 py-3 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-mono font-black ${item.submitted && currentUser.type === 'customer' ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
                             placeholder="0"
                           />
                         </div>
@@ -2302,7 +2320,8 @@ const WineDistributorApp = () => {
                             min="0"
                             value={item.bottles}
                             onChange={(e) => updateListUnits(item.id, 'bottles', e.target.value)}
-                            className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-mono font-black text-slate-900"
+                            disabled={item.submitted && currentUser.type === 'customer'}
+                            className={`w-full px-5 py-3 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-mono font-black ${item.submitted && currentUser.type === 'customer' ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
                             placeholder="0"
                           />
                         </div>

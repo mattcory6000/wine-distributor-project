@@ -112,5 +112,12 @@
     "username": "Bugsy Wine Bar",
     "password": "password",
     "type": "customer"
+  },
+  {
+    "id": "user-1769658304790",
+    "username": "Trey's House",
+    "password": "LongAve",
+    "type": "customer",
+    "email": "trey.stephenson@gmail.com"
   }
 ]
