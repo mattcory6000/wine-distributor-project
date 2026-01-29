@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Wine, Package, Users, LogOut, X, Search, ShoppingCart, FileSpreadsheet, Settings, ChevronDown, ChevronRight, ClipboardList, ListPlus, UserCheck, Edit, Trash2, Download, Plus, ExternalLink } from 'lucide-react';
+import { Upload, Wine, Package, Users, LogOut, X, Search, ShoppingCart, FileSpreadsheet, Settings, ChevronDown, ChevronRight, ClipboardList, ListPlus, UserCheck, Edit, Trash2, Download, Plus, ExternalLink, LayoutGrid, List } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const WineDistributorApp = () => {
@@ -60,6 +60,7 @@ const WineDistributorApp = () => {
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id, name }
   const [originalAdmin, setOriginalAdmin] = useState(null); // For "Login As" functionality
   const [selectedExtraFields, setSelectedExtraFields] = useState([]); // Extra columns to import
+  const [catalogViewMode, setCatalogViewMode] = useState('grid'); // 'grid' or 'list' for customer catalog
 
   const toggleSection = (section) => {
     setCollapsedSections(prev => ({
@@ -817,7 +818,13 @@ const WineDistributorApp = () => {
     const userList = allCustomerLists[username] || [];
     const newList = userList.map(item => {
       if (item.id === productId) {
-        return { ...item, status, notes, adminNotes: adminNotes !== undefined ? adminNotes : item.adminNotes };
+        return {
+          ...item,
+          status,
+          notes,
+          adminNotes: adminNotes !== undefined ? adminNotes : item.adminNotes,
+          hasUnseenUpdate: currentUser.type === 'admin' ? true : item.hasUnseenUpdate
+        };
       }
       return item;
     });
@@ -830,6 +837,23 @@ const WineDistributorApp = () => {
     await saveSpecialOrderLists(updatedAllLists);
     setAllCustomerLists(updatedAllLists);
     setSpecialOrderList(newList);
+  };
+
+  const markSpecialOrderUpdatesAsSeen = async () => {
+    if (currentUser.type !== 'customer') return;
+
+    const username = currentUser.username;
+    const userList = allCustomerLists[username] || [];
+    const updated = userList.some(item => item.hasUnseenUpdate);
+
+    if (updated) {
+      const newList = userList.map(item => ({ ...item, hasUnseenUpdate: false }));
+      const updatedAllLists = { ...allCustomerLists, [username]: newList };
+
+      await saveSpecialOrderLists(updatedAllLists);
+      setAllCustomerLists(updatedAllLists);
+      setSpecialOrderList(newList);
+    }
   };
 
   const removeFromList = async (productId) => {
@@ -1042,7 +1066,8 @@ const WineDistributorApp = () => {
                 return {
                   ...item,
                   status: status,
-                  adminNotes: newAdminNotes !== undefined ? newAdminNotes : item.adminNotes
+                  adminNotes: newAdminNotes !== undefined ? newAdminNotes : item.adminNotes,
+                  hasUnseenUpdate: true
                 };
               }
               return item;
@@ -2673,7 +2698,10 @@ const WineDistributorApp = () => {
               </div>
               <div className="flex items-center space-x-4">
                 <button
-                  onClick={() => setShowList(!showList)}
+                  onClick={() => {
+                    setShowList(!showList);
+                    if (!showList) markSpecialOrderUpdatesAsSeen();
+                  }}
                   className="relative p-3 bg-white hover:bg-rose-50 rounded-2xl transition-all border border-slate-100 hover:border-rose-100 shadow-sm shadow-slate-100 group"
                   title="View Collection"
                 >
@@ -2682,6 +2710,9 @@ const WineDistributorApp = () => {
                     <span className="absolute -top-1.5 -right-1.5 bg-[#1a1a1a] text-white text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white shadow-md animate-in zoom-in-0 duration-300">
                       {specialOrderList.length}
                     </span>
+                  )}
+                  {specialOrderList.some(item => item.hasUnseenUpdate) && (
+                    <span className="absolute top-0 right-0 w-3 h-3 bg-rose-500 rounded-full border-2 border-white animate-pulse"></span>
                   )}
                 </button>
                 <div className="h-10 w-px bg-slate-100 mx-2 hidden md:block"></div>
@@ -2708,15 +2739,31 @@ const WineDistributorApp = () => {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Search Collection</label>
-                  <div className="relative group">
-                    <Search className="absolute left-5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-rose-500 transition-colors" />
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Vintage, producer, or vineyard name..."
-                      className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-rose-500/5 focus:border-rose-500/50 transition-all placeholder:text-slate-300 font-medium"
-                    />
+                  <div className="relative group flex items-center space-x-4">
+                    <div className="relative flex-grow">
+                      <Search className="absolute left-5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-rose-500 transition-colors" />
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Vintage, producer, or vineyard name..."
+                        className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-rose-500/5 focus:border-rose-500/50 transition-all placeholder:text-slate-300 font-medium"
+                      />
+                    </div>
+                    <div className="flex bg-slate-100 p-1 rounded-2xl shrink-0">
+                      <button
+                        onClick={() => setCatalogViewMode('grid')}
+                        className={`p-2.5 rounded-xl transition-all ${catalogViewMode === 'grid' ? 'bg-white shadow-md text-rose-600' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <LayoutGrid className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => setCatalogViewMode('list')}
+                        className={`p-2.5 rounded-xl transition-all ${catalogViewMode === 'list' ? 'bg-white shadow-md text-rose-600' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <List className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -2736,85 +2783,142 @@ const WineDistributorApp = () => {
               </div>
             </div>
 
-            {/* Product Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-              {filteredProducts.map(product => {
-                const calc = calculateFrontlinePrice(product);
-                return (
-                  <div key={product.id} className="bg-white rounded-[2.5rem] p-10 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 hover:border-rose-100 hover:shadow-[0_12px_48px_-12px_rgba(225,29,72,0.08)] transition-all duration-500 group flex flex-col justify-between h-full">
-                    <div>
-                      <div className="flex justify-between items-start mb-6">
-                        <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-3 py-1 rounded-full uppercase tracking-wider">{product.productType || 'Wine'}</span>
-                        <span className="text-[11px] font-mono text-slate-300">{product.itemCode}</span>
-                      </div>
-                      <h3 className="font-extrabold text-2xl text-slate-900 tracking-tight leading-tight group-hover:text-rose-600 transition-colors uppercase">{product.producer}</h3>
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 mb-2">
-                        <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest">{product.supplier}</p>
-                        {(product.country || product.region) && (
-                          <p className="text-[10px] text-slate-400 font-black uppercase tracking-tight">
-                            <span className="text-slate-200 mx-1.5">•</span>
-                            {product.country}{product.region ? ` / ${product.region}` : ''}
-                          </p>
+            {/* Product Catalog Display */}
+            {catalogViewMode === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+                {filteredProducts.map(product => {
+                  const calc = calculateFrontlinePrice(product);
+                  return (
+                    <div key={product.id} className="bg-white rounded-[2.5rem] p-10 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 hover:border-rose-100 hover:shadow-[0_12px_48px_-12px_rgba(225,29,72,0.08)] transition-all duration-500 group flex flex-col justify-between h-full">
+                      <div>
+                        <div className="flex justify-between items-start mb-6">
+                          <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-3 py-1 rounded-full uppercase tracking-wider">{product.productType || 'Wine'}</span>
+                          <span className="text-[11px] font-mono text-slate-300">{product.itemCode}</span>
+                        </div>
+                        <h3 className="font-extrabold text-2xl text-slate-900 tracking-tight leading-tight group-hover:text-rose-600 transition-colors uppercase">{product.producer}</h3>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 mb-2">
+                          <p className="text-[10px] text-rose-500 font-bold uppercase tracking-widest">{product.supplier}</p>
+                          {(product.country || product.region) && (
+                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-tight">
+                              <span className="text-slate-200 mx-1.5">•</span>
+                              {product.country}{product.region ? ` / ${product.region}` : ''}
+                            </p>
+                          )}
+                        </div>
+                        {product.appellation && (
+                          <p className="text-[11px] text-slate-500 font-bold italic uppercase tracking-tighter mb-2">{product.appellation}</p>
                         )}
-                      </div>
-                      {product.appellation && (
-                        <p className="text-[11px] text-slate-500 font-bold italic uppercase tracking-tighter mb-2">{product.appellation}</p>
-                      )}
-                      {product.productLink ? (
-                        <a
-                          href={product.productLink.startsWith('http') ? product.productLink : `https://${product.productLink}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-slate-500 font-medium mt-1 leading-relaxed hover:text-rose-600 transition-all inline-flex items-center group/link decoration-slate-200"
-                        >
-                          {product.productName}
-                          <ExternalLink className="w-3 h-3 ml-2 opacity-0 group-hover/link:opacity-100 transition-all transform translate-x-1" />
-                        </a>
-                      ) : (
-                        <p className="text-slate-500 font-medium mt-1 leading-relaxed">{product.productName}</p>
-                      )}
+                        {product.productLink ? (
+                          <a
+                            href={product.productLink.startsWith('http') ? product.productLink : `https://${product.productLink}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-slate-500 font-medium mt-1 leading-relaxed hover:text-rose-600 transition-all inline-flex items-center group/link decoration-slate-200"
+                          >
+                            {product.productName}
+                            <ExternalLink className="w-3 h-3 ml-2 opacity-0 group-hover/link:opacity-100 transition-all transform translate-x-1" />
+                          </a>
+                        ) : (
+                          <p className="text-slate-500 font-medium mt-1 leading-relaxed">{product.productName}</p>
+                        )}
 
-                      {/* Dynamic Extra Fields Display */}
-                      <div className="flex flex-wrap gap-1.5 mt-4">
-                        {Object.entries(product).map(([key, value]) => {
-                          const standardFields = ['id', 'itemCode', 'producer', 'productName', 'vintage', 'packSize', 'bottleSize', 'productType', 'fobCasePrice', 'productLink', 'supplier', 'uploadDate', 'frontlinePrice', 'frontlineCase', 'srp', 'whlsBottle', 'whlsCase', 'laidIn', 'formulaUsed', 'country', 'region', 'appellation'];
-                          if (standardFields.includes(key) || !value || typeof value === 'object') return null;
-                          return (
-                            <span key={key} className="inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight bg-slate-50 text-slate-400 border border-slate-100 shadow-sm">
-                              <span className="text-slate-300 mr-2">{key}:</span> <span className="text-slate-600">{String(value)}</span>
-                            </span>
-                          );
-                        })}
+                        {/* Dynamic Extra Fields Display */}
+                        <div className="flex flex-wrap gap-1.5 mt-4">
+                          {Object.entries(product).map(([key, value]) => {
+                            const standardFields = ['id', 'itemCode', 'producer', 'productName', 'vintage', 'packSize', 'bottleSize', 'productType', 'fobCasePrice', 'productLink', 'supplier', 'uploadDate', 'frontlinePrice', 'frontlineCase', 'srp', 'whlsBottle', 'whlsCase', 'laidIn', 'formulaUsed', 'country', 'region', 'appellation'];
+                            if (standardFields.includes(key) || !value || typeof value === 'object') return null;
+                            return (
+                              <span key={key} className="inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-tight bg-slate-50 text-slate-400 border border-slate-100 shadow-sm">
+                                <span className="text-slate-300 mr-2">{key}:</span> <span className="text-slate-600">{String(value)}</span>
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="mt-8 pt-6 border-t border-slate-50 flex flex-col gap-6">
-                      <div className="flex justify-between items-end">
-                        <div>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Frontline Price</p>
-                          <div className="flex items-baseline space-x-1">
-                            <span className="text-3xl font-black text-slate-900 tracking-tighter">${calc.frontlinePrice}</span>
-                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">/ btl</span>
+                      <div className="mt-8 pt-6 border-t border-slate-50 flex flex-col gap-6">
+                        <div className="flex justify-between items-end">
+                          <div>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Frontline Price</p>
+                            <div className="flex items-baseline space-x-1">
+                              <span className="text-3xl font-black text-slate-900 tracking-tighter">${calc.frontlinePrice}</span>
+                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">/ btl</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">{product.packSize}pk • {product.bottleSize}</p>
+                            <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">{product.vintage || 'NV'}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">{product.packSize}pk • {product.bottleSize}</p>
-                          <p className="text-xs font-bold text-slate-400 tracking-wide uppercase">{product.vintage || 'NV'}</p>
-                        </div>
-                      </div>
 
-                      <button
-                        onClick={() => addToList({ ...product, ...calc })}
-                        className="w-full bg-[#1a1a1a] text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all duration-300 flex items-center justify-center space-x-3 active:scale-[0.98] shadow-lg shadow-slate-200"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Submit Request</span>
-                      </button>
+                        <button
+                          onClick={() => addToList({ ...product, ...calc })}
+                          className="w-full bg-[#1a1a1a] text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all duration-300 flex items-center justify-center space-x-3 active:scale-[0.98] shadow-lg shadow-slate-200"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Submit Request</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-white rounded-[2rem] overflow-hidden border border-slate-100/80 shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
+                <div className="overflow-x-auto">
+                  <table className="w-full whitespace-nowrap">
+                    <thead>
+                      <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 border-b border-slate-100">
+                        <th className="py-5 px-8 text-left">Producer / Product</th>
+                        <th className="py-5 px-6 text-left">Vintage</th>
+                        <th className="py-5 px-6 text-left">Format</th>
+                        <th className="py-5 px-6 text-left">Type</th>
+                        <th className="py-5 px-6 text-right">Unit Net</th>
+                        <th className="py-5 px-8 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {filteredProducts.map(product => {
+                        const calc = calculateFrontlinePrice(product);
+                        return (
+                          <tr key={product.id} className="group hover:bg-rose-50/20 transition-all duration-300">
+                            <td className="py-4 px-8">
+                              <div>
+                                <p className="font-extrabold text-slate-900 group-hover:text-rose-600 transition-colors uppercase tracking-tight">{product.producer}</p>
+                                <p className="text-xs text-slate-400 font-medium">{product.productName}</p>
+                              </div>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className="text-xs font-bold text-slate-500">{product.vintage || 'NV'}</span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100/50 px-2 py-1 rounded-lg">
+                                {product.packSize}×{product.bottleSize}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span className="text-[9px] font-bold text-rose-500 uppercase tracking-wider bg-rose-50 px-2 py-0.5 rounded-full">{product.productType || 'Wine'}</span>
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              <span className="text-sm font-black text-slate-900">${calc.frontlinePrice}</span>
+                            </td>
+                            <td className="py-4 px-8 text-center">
+                              <button
+                                onClick={() => addToList({ ...product, ...calc })}
+                                className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-rose-600 transition-all shadow-sm active:scale-90"
+                                title="Add to List"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2853,8 +2957,13 @@ const WineDistributorApp = () => {
                     <div key={item.id} className="bg-white border border-slate-100 rounded-[2rem] p-8 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 group">
                       <div className="flex justify-between items-start mb-6">
                         <div className="flex-1 pr-6">
-                          <p className="font-black text-lg text-slate-900 tracking-tight uppercase group-hover:text-rose-600 transition-colors">{item.producer}</p>
-                          <p className="text-sm text-slate-500 font-medium mt-0.5">{item.productName}</p>
+                          <div className="flex items-center space-x-2 mb-1">
+                            <p className="font-black text-lg text-slate-900 tracking-tight uppercase group-hover:text-rose-600 transition-colors">{item.producer}</p>
+                            {item.hasUnseenUpdate && (
+                              <span className="text-[8px] font-black text-white bg-rose-500 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">New Update</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-slate-500 font-medium">{item.productName}</p>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">${item.frontlinePrice} / unit frontline</p>
                         </div>
                         {(!item.submitted || currentUser.type === 'admin') && (
