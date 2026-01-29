@@ -1219,21 +1219,6 @@ const WineDistributorApp = () => {
           </nav>
 
           <div className="p-8 max-w-7xl mx-auto">
-            {/* Admin Tools */}
-            <div className="flex justify-start mb-10">
-              <button
-                onClick={async () => {
-                  setDeleteConfirmation({
-                    type: 'reset',
-                    name: 'ALL SYSTEM DATA'
-                  });
-                }}
-                className="px-6 py-3 bg-white text-rose-600 border border-rose-100 rounded-2xl font-bold text-sm hover:bg-rose-50 transition-all duration-200 shadow-sm flex items-center space-x-2 active:scale-95"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>Reset Entire Database</span>
-              </button>
-            </div>
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
@@ -1273,7 +1258,7 @@ const WineDistributorApp = () => {
                     <Users className="w-6 h-6 text-purple-600" />
                   </div>
                 </div>
-                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Suppliers</p>
+                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Suppliers and Offers</p>
                 <p className="text-4xl font-extrabold text-slate-900 mt-2 tracking-tight">{suppliers.length}</p>
                 <p className="text-xs text-slate-400 mt-2 font-medium italic">Unique distributors</p>
               </div>
@@ -1461,7 +1446,7 @@ const WineDistributorApp = () => {
                     {collapsedSections.suppliers ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
                   </div>
                   <div>
-                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Suppliers</h2>
+                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Suppliers and Offers</h2>
                     <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Distributor network management</p>
                   </div>
                 </div>
@@ -2410,6 +2395,21 @@ const WineDistributorApp = () => {
                 </div>
               </div>
             )}
+            {/* Admin Tools */}
+            <div className="flex justify-center mt-20 pb-10">
+              <button
+                onClick={async () => {
+                  setDeleteConfirmation({
+                    type: 'reset',
+                    name: 'ALL SYSTEM DATA'
+                  });
+                }}
+                className="px-8 py-4 bg-white text-rose-400 border border-slate-100 rounded-2xl font-bold text-xs hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all duration-300 shadow-sm flex items-center space-x-2 active:scale-95 group"
+              >
+                <Trash2 className="w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity" />
+                <span>Reset Entire Database</span>
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -2481,7 +2481,7 @@ const WineDistributorApp = () => {
                       onChange={(e) => setSelectedSupplier(e.target.value)}
                       className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-rose-500/5 focus:border-rose-500/50 transition-all font-bold text-sm appearance-none cursor-pointer pr-12 text-slate-700"
                     >
-                      <option value="all">All Suppliers</option>
+                      <option value="all">All Suppliers and Offers</option>
                       {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <ChevronDown className="absolute right-5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
