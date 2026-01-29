@@ -55,6 +55,7 @@ const WineDistributorApp = () => {
   const [allUsers, setAllUsers] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id, name }
+  const [originalAdmin, setOriginalAdmin] = useState(null); // For "Login As" functionality
 
   const toggleSection = (section) => {
     setCollapsedSections(prev => ({
@@ -314,7 +315,26 @@ const WineDistributorApp = () => {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setOriginalAdmin(null);
     setView('login');
+    setSpecialOrderList([]);
+    setShowList(false);
+  };
+
+  const handleImpersonate = (user) => {
+    if (currentUser.type !== 'admin') return;
+    setOriginalAdmin(currentUser);
+    setCurrentUser(user);
+    setView('customer');
+    setSpecialOrderList(allCustomerLists[user.username] || []);
+    setShowList(false);
+  };
+
+  const handleStopImpersonating = () => {
+    if (!originalAdmin) return;
+    setCurrentUser(originalAdmin);
+    setOriginalAdmin(null);
+    setView('admin');
     setSpecialOrderList([]);
     setShowList(false);
   };
@@ -1402,6 +1422,14 @@ const WineDistributorApp = () => {
                               <div className="flex items-center justify-end gap-2">
                                 {user.id !== currentUser.id && (
                                   <>
+                                    {user.type === 'customer' && !user.accessRevoked && (
+                                      <button
+                                        onClick={() => handleImpersonate(user)}
+                                        className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all duration-200"
+                                      >
+                                        Login As
+                                      </button>
+                                    )}
                                     <button
                                       onClick={() => updateUserRole(user.id, user.type === 'admin' ? 'customer' : 'admin')}
                                       className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-200 border ${user.type === 'admin'
@@ -2414,7 +2442,23 @@ const WineDistributorApp = () => {
         </div>
       ) : (
         <div className="customer-view-transition-container">
-          <nav className="bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky top-0 z-50 px-8 py-5">
+          {originalAdmin && (
+            <div className="bg-[#1a1a1a] text-white py-3 px-8 flex justify-between items-center animate-in slide-in-from-top duration-500 sticky top-0 z-[100]">
+              <div className="flex items-center space-x-3">
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                <p className="text-xs font-bold tracking-tight">
+                  <span className="text-slate-400">IMPERSONATING:</span> {currentUser.username}
+                </p>
+              </div>
+              <button
+                onClick={handleStopImpersonating}
+                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border border-white/10"
+              >
+                Return to Admin Mode
+              </button>
+            </div>
+          )}
+          <nav className={`bg-white/80 backdrop-blur-xl border-b border-slate-200/50 sticky z-50 px-8 py-5 ${originalAdmin ? 'top-[52px]' : 'top-0'}`}>
             <div className="max-w-7xl mx-auto flex justify-between items-center">
               <div className="flex items-center space-x-4">
                 <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center border border-rose-100/50">
