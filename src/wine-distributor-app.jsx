@@ -49,10 +49,10 @@ const WineDistributorApp = () => {
     orders: false,
     discontinued: false,
     formulas: false,
-    suppliers: false,
-    upload: false,
-    dressner: false
+    dressner: false,
+    team: false
   });
+  const [allUsers, setAllUsers] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id, name }
 
@@ -70,10 +70,23 @@ const WineDistributorApp = () => {
   const [authUserType, setAuthUserType] = useState('customer');
   const [authEmail, setAuthEmail] = useState('');
   const [authError, setAuthError] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
 
   // Load data from storage on mount
   useEffect(() => {
     loadFromStorage();
+    // Check for reset token in URL
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      setResetToken(token);
+      setView('reset-password');
+      // Clean up URL
+      window.history.replaceState({}, document.title, "/");
+    }
   }, []);
 
   const loadFromStorage = async () => {
@@ -161,7 +174,12 @@ const WineDistributorApp = () => {
         setCurrentUser(data.user);
         const userList = allCustomerLists[data.user.username] || [];
         setSpecialOrderList(userList);
-        setView(data.user.type === 'admin' ? 'admin' : 'catalog');
+        if (data.user.type === 'admin') {
+          fetchAllUsers();
+          setView('admin');
+        } else {
+          setView('catalog');
+        }
       } else {
         setAuthError(data.error || 'Invalid credentials');
       }
@@ -180,7 +198,6 @@ const WineDistributorApp = () => {
         body: JSON.stringify({
           username: authUsername,
           password: authPassword,
-          type: authUserType,
           email: authEmail
         })
       });
@@ -194,6 +211,104 @@ const WineDistributorApp = () => {
       }
     } catch (error) {
       setAuthError('Server connection failed');
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthMessage('');
+    try {
+      const response = await fetch('http://localhost:3001/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAuthMessage(data.message);
+      } else {
+        setAuthError(data.error || 'Request failed');
+      }
+    } catch (error) {
+      setAuthError('Server connection failed');
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (newPassword !== confirmPassword) {
+      setAuthError('Passwords do not match');
+      return;
+    }
+    try {
+      const response = await fetch('http://localhost:3001/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, password: newPassword })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAuthMessage(data.message);
+        setTimeout(() => {
+          setView('login');
+          setResetToken('');
+          setAuthMessage('');
+        }, 3000);
+      } else {
+        setAuthError(data.error || 'Reset failed');
+      }
+    } catch (error) {
+      setAuthError('Server connection failed');
+    }
+  };
+
+  const fetchAllUsers = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/auth/users');
+      const data = await response.json();
+      setAllUsers(data);
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+    }
+  };
+
+  const updateUserRole = async (userId, newRole) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/auth/users/${userId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: newRole })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, type: newRole } : u));
+        setUploadStatus(`User role updated to ${newRole}`);
+        setTimeout(() => setUploadStatus(''), 3000);
+      }
+    } catch (error) {
+      console.error('Failed to update user role:', error);
+    }
+  };
+
+  const toggleUserAccess = async (userId, accessRevoked) => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/auth/users/${userId}/access`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessRevoked })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, accessRevoked: data.user.accessRevoked } : u));
+        setUploadStatus(`User access ${accessRevoked ? 'revoked' : 'restored'}`);
+        setTimeout(() => setUploadStatus(''), 3000);
+      } else {
+        alert(data.error || 'Failed to update access');
+      }
+    } catch (error) {
+      console.error('Failed to update access:', error);
     }
   };
 
@@ -871,7 +986,7 @@ const WineDistributorApp = () => {
   const suppliers = [...new Set(products.map(p => p.supplier))];
 
   // Login View
-  if (view === 'login') {
+  if (view === 'login' || view === 'forgot-password' || view === 'reset-password') {
     return (
       <div className="min-h-screen bg-[#faf9f6] flex items-center justify-center p-4 relative overflow-hidden">
         {/* Abstract background elements */}
@@ -887,23 +1002,79 @@ const WineDistributorApp = () => {
               AOC Wines
             </h1>
             <p className="text-slate-500 font-medium tracking-wide uppercase text-xs">
-              {authMode === 'login' ? 'Partner Portal' : 'Create Account'}
+              {view === 'login' ? (authMode === 'login' ? 'Partner Portal' : 'Create Account') :
+                view === 'forgot-password' ? 'Reset Request' : 'Restore Access'}
             </p>
           </div>
 
-          <form onSubmit={authMode === 'login' ? handleLogin : handleSignup} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-[13px] font-semibold text-slate-700 ml-1 uppercase tracking-wider">Establishment</label>
-              <input
-                type="text"
-                required
-                value={authUsername}
-                onChange={(e) => setAuthUsername(e.target.value)}
-                className="w-full px-5 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all duration-200 placeholder:text-slate-400 font-medium"
-                placeholder="Name or Username"
-              />
-            </div>
-            {authMode === 'signup' && (
+          {(view === 'login') && (
+            <form onSubmit={authMode === 'login' ? handleLogin : handleSignup} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[13px] font-semibold text-slate-700 ml-1 uppercase tracking-wider">Establishment</label>
+                <input
+                  type="text"
+                  required
+                  value={authUsername}
+                  onChange={(e) => setAuthUsername(e.target.value)}
+                  className="w-full px-5 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all duration-200 placeholder:text-slate-400 font-medium"
+                  placeholder="Name or Username"
+                />
+              </div>
+              {authMode === 'signup' && (
+                <div className="space-y-2">
+                  <label className="text-[13px] font-semibold text-slate-700 ml-1 uppercase tracking-wider">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full px-5 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all duration-200 placeholder:text-slate-400 font-medium"
+                    placeholder="notifications@establishment.com"
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[13px] font-semibold text-slate-700 ml-1 uppercase tracking-wider">Password</label>
+                  {authMode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={() => setView('forgot-password')}
+                      className="text-[11px] font-bold text-slate-400 hover:text-rose-600 transition-colors"
+                    >
+                      Forgot Password?
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  required
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="w-full px-5 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all duration-200 placeholder:text-slate-400 font-medium"
+                  placeholder="••••••••"
+                />
+              </div>
+
+              {/* Admin Signup Restricted: type enforced to 'customer' by backend */}
+
+              {authError && (
+                <div className="p-4 bg-rose-50 border border-rose-100/50 text-rose-700 text-sm rounded-2xl text-center font-medium animate-in fade-in slide-in-from-top-2 duration-300">
+                  {authError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-[#1a1a1a] text-white py-4 rounded-2xl font-bold hover:bg-slate-900 transition-all duration-200 shadow-xl shadow-slate-200 hover:shadow-2xl hover:shadow-slate-300 transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-lg"
+              >
+                {authMode === 'login' ? 'Continue to Portal' : 'Create My Account'}
+              </button>
+            </form>
+          )}
+
+          {(view === 'forgot-password') && (
+            <form onSubmit={handleForgotPassword} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-[13px] font-semibold text-slate-700 ml-1 uppercase tracking-wider">Email Address</label>
                 <input
@@ -912,62 +1083,102 @@ const WineDistributorApp = () => {
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
                   className="w-full px-5 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all duration-200 placeholder:text-slate-400 font-medium"
-                  placeholder="notifications@establishment.com"
+                  placeholder="The email associated with your account"
                 />
               </div>
-            )}
-            <div className="space-y-2">
-              <label className="text-[13px] font-semibold text-slate-700 ml-1 uppercase tracking-wider">Password</label>
-              <input
-                type="password"
-                required
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                className="w-full px-5 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all duration-200 placeholder:text-slate-400 font-medium"
-                placeholder="••••••••"
-              />
-            </div>
 
-            {authMode === 'signup' && (
-              <div className="flex items-center space-x-3 py-1 ml-1 cursor-pointer group">
+              {authError && (
+                <div className="p-4 bg-rose-50 border border-rose-100/50 text-rose-700 text-sm rounded-2xl text-center font-medium">
+                  {authError}
+                </div>
+              )}
+
+              {authMessage && (
+                <div className="p-4 bg-emerald-50 border border-emerald-100/50 text-emerald-700 text-sm rounded-2xl text-center font-medium">
+                  {authMessage}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-[#1a1a1a] text-white py-4 rounded-2xl font-bold hover:bg-slate-900 transition-all duration-200 shadow-xl shadow-slate-200"
+              >
+                Send Reset Link
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setView('login');
+                  setAuthError('');
+                  setAuthMessage('');
+                }}
+                className="w-full text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-colors"
+              >
+                Back to Login
+              </button>
+            </form>
+          )}
+
+          {(view === 'reset-password') && (
+            <form onSubmit={handleResetPassword} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[13px] font-semibold text-slate-700 ml-1 uppercase tracking-wider">New Password</label>
                 <input
-                  type="checkbox"
-                  id="admin-toggle"
-                  checked={authUserType === 'admin'}
-                  onChange={(e) => setAuthUserType(e.target.checked ? 'admin' : 'customer')}
-                  className="w-5 h-5 text-rose-600 focus:ring-rose-500/20 border-slate-300 rounded-lg cursor-pointer transition-all duration-200"
+                  type="password"
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-5 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all duration-200 font-medium"
+                  placeholder="••••••••"
                 />
-                <label htmlFor="admin-toggle" className="text-sm font-medium text-slate-600 cursor-pointer group-hover:text-slate-900 transition-colors">
-                  Request Admin Access
-                </label>
               </div>
-            )}
-
-            {authError && (
-              <div className="p-4 bg-rose-50 border border-rose-100/50 text-rose-700 text-sm rounded-2xl text-center font-medium animate-in fade-in slide-in-from-top-2 duration-300">
-                {authError}
+              <div className="space-y-2">
+                <label className="text-[13px] font-semibold text-slate-700 ml-1 uppercase tracking-wider">Confirm Password</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-5 py-3 bg-white/50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all duration-200 font-medium"
+                  placeholder="••••••••"
+                />
               </div>
-            )}
 
-            <button
-              type="submit"
-              className="w-full bg-[#1a1a1a] text-white py-4 rounded-2xl font-bold hover:bg-slate-900 transition-all duration-200 shadow-xl shadow-slate-200 hover:shadow-2xl hover:shadow-slate-300 transform hover:-translate-y-0.5 active:translate-y-0 active:shadow-lg"
-            >
-              {authMode === 'login' ? 'Continue to Portal' : 'Create My Account'}
-            </button>
-          </form>
+              {authError && (
+                <div className="p-4 bg-rose-50 border border-rose-100/50 text-rose-700 text-sm rounded-2xl text-center font-medium">
+                  {authError}
+                </div>
+              )}
 
-          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-            <button
-              onClick={() => {
-                setAuthMode(authMode === 'login' ? 'signup' : 'login');
-                setAuthError('');
-              }}
-              className="text-slate-500 font-medium hover:text-rose-600 transition-colors duration-200 h-10 px-4 rounded-xl hover:bg-rose-50"
-            >
-              {authMode === 'login' ? "Don't have an account? Sign Up" : "Already have an account? Log In"}
-            </button>
-          </div>
+              {authMessage && (
+                <div className="p-4 bg-emerald-50 border border-emerald-100/50 text-emerald-700 text-sm rounded-2xl text-center font-medium">
+                  {authMessage}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-[#1a1a1a] text-white py-4 rounded-2xl font-bold hover:bg-slate-900 transition-all duration-200 shadow-xl shadow-slate-200"
+              >
+                Reset Password
+              </button>
+            </form>
+          )}
+
+          {view === 'login' && (
+            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+              <button
+                onClick={() => {
+                  setAuthMode(authMode === 'login' ? 'signup' : 'login');
+                  setAuthError('');
+                }}
+                className="text-slate-500 font-medium hover:text-rose-600 transition-colors duration-200 h-10 px-4 rounded-xl hover:bg-rose-50"
+              >
+                {authMode === 'login' ? "Don't have an account? Sign Up" : "Already have an account? Log In"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1149,6 +1360,91 @@ const WineDistributorApp = () => {
                         })}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Team & Security Management */}
+            <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
+              <div
+                className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
+                onClick={() => toggleSection('team')}
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.team ? 'bg-slate-100' : 'bg-rose-50'}`}>
+                  {collapsedSections.team ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
+                </div>
+                <div>
+                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Team & Security</h2>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Manage administrative access and permissions</p>
+                </div>
+              </div>
+
+              {!collapsedSections.team && (
+                <div className="animate-in fade-in duration-500">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-50">
+                          <th className="pb-4 pl-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Username</th>
+                          <th className="pb-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email</th>
+                          <th className="pb-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Current Role</th>
+                          <th className="pb-4 pr-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {allUsers.map((user) => (
+                          <tr key={user.id} className="group hover:bg-slate-50/30 transition-colors">
+                            <td className="py-4 pl-1 font-extrabold text-slate-900 text-sm">
+                              <div className="flex items-center gap-2">
+                                {user.username}
+                                {user.accessRevoked && (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[8px] font-black uppercase tracking-tighter border border-amber-100">
+                                    Revoked
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-4 text-slate-500 text-xs font-medium">{user.email || '-'}</td>
+                            <td className="py-4 text-center">
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${user.type === 'admin'
+                                ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                                : 'bg-slate-50 text-slate-400 border border-slate-100'
+                                }`}>
+                                {user.type}
+                              </span>
+                            </td>
+                            <td className="py-4 pr-1 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {user.id !== currentUser.id && (
+                                  <>
+                                    <button
+                                      onClick={() => updateUserRole(user.id, user.type === 'admin' ? 'customer' : 'admin')}
+                                      className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-200 border ${user.type === 'admin'
+                                        ? 'text-slate-400 border-slate-200 hover:bg-slate-100'
+                                        : 'text-rose-600 border-rose-100 hover:bg-rose-50'
+                                        }`}
+                                    >
+                                      {user.type === 'admin' ? 'Revoke Admin' : 'Make Admin'}
+                                    </button>
+                                    <button
+                                      onClick={() => toggleUserAccess(user.id, !user.accessRevoked)}
+                                      disabled={user.username === 'treys'}
+                                      className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-200 border ${user.accessRevoked
+                                        ? 'text-emerald-600 border-emerald-100 hover:bg-emerald-50'
+                                        : 'text-rose-600 border-rose-100 hover:bg-rose-50 disabled:opacity-30 disabled:hover:bg-transparent'
+                                        }`}
+                                    >
+                                      {user.accessRevoked ? 'Restore Access' : 'Revoke Access'}
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>

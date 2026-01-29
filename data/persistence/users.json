@@ -3,7 +3,8 @@
     "id": "user-1769562272835",
     "username": "treys",
     "password": "Richelieu",
-    "type": "admin"
+    "type": "admin",
+    "email": "trey.stephenson@gmail.com"
   },
   {
     "id": "user-1769562389315",
@@ -87,7 +88,8 @@
     "id": "user-1769622224807",
     "username": "bug_customer",
     "password": "password",
-    "type": "customer"
+    "type": "customer",
+    "accessRevoked": false
   },
   {
     "id": "user-1769622263882",
@@ -119,5 +121,12 @@
     "password": "LongAve",
     "type": "customer",
     "email": "trey.stephenson@gmail.com"
+  },
+  {
+    "id": "user-1769658799947",
+    "username": "new_admin_candidate",
+    "password": "password",
+    "type": "admin",
+    "email": "test@example.com"
   }
 ]
