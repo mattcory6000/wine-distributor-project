@@ -4,6 +4,7 @@
     "username": "treys",
     "password": "Richelieu",
     "type": "admin",
+    "isSuperAdmin": true,
     "email": "trey.stephenson@gmail.com"
   },
   {
@@ -128,5 +129,13 @@
     "password": "password",
     "type": "admin",
     "email": "test@example.com"
+  },
+  {
+    "id": "user-1769688801637",
+    "username": "Matt Cory",
+    "password": "bevdataai",
+    "type": "admin",
+    "isSuperAdmin": true,
+    "email": "matt.cory@gmail.com"
   }
 ]

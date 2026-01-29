@@ -98,7 +98,7 @@ app.post('/api/auth/login', (req, res) => {
         return res.status(403).json({ error: 'Access Revoked. Please contact administrator.' });
     }
 
-    res.json({ success: true, user: { id: user.id, username: user.username, type: user.type } });
+    res.json({ success: true, user: { id: user.id, username: user.username, type: user.type, isSuperAdmin: !!user.isSuperAdmin } });
 });
 
 // --- Admin User Management Endpoints ---
@@ -111,7 +111,8 @@ app.get('/api/auth/users', (req, res) => {
         username: u.username,
         type: u.type,
         email: u.email,
-        accessRevoked: !!u.accessRevoked
+        accessRevoked: !!u.accessRevoked,
+        isSuperAdmin: !!u.isSuperAdmin
     }));
     res.json(safeUsers);
 });

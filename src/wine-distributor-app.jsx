@@ -1409,98 +1409,100 @@ const WineDistributorApp = () => {
               )}
             </div>
 
-            {/* Team & Security Management */}
-            <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
-              <div
-                className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
-                onClick={() => toggleSection('team')}
-              >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.team ? 'bg-slate-100' : 'bg-rose-50'}`}>
-                  {collapsedSections.team ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
-                </div>
-                <div>
-                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Team & Security</h2>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Manage administrative access and permissions</p>
-                </div>
-              </div>
-
-              {!collapsedSections.team && (
-                <div className="animate-in fade-in duration-500">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="border-b border-slate-50">
-                          <th className="pb-4 pl-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Username</th>
-                          <th className="pb-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email</th>
-                          <th className="pb-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Current Role</th>
-                          <th className="pb-4 pr-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
-                        {allUsers.map((user) => (
-                          <tr key={user.id} className="group hover:bg-slate-50/30 transition-colors">
-                            <td className="py-4 pl-1 font-extrabold text-slate-900 text-sm">
-                              <div className="flex items-center gap-2">
-                                {user.username}
-                                {user.accessRevoked && (
-                                  <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[8px] font-black uppercase tracking-tighter border border-amber-100">
-                                    Revoked
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-4 text-slate-500 text-xs font-medium">{user.email || '-'}</td>
-                            <td className="py-4 text-center">
-                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${user.type === 'admin'
-                                ? 'bg-rose-50 text-rose-600 border border-rose-100'
-                                : 'bg-slate-50 text-slate-400 border border-slate-100'
-                                }`}>
-                                {user.type}
-                              </span>
-                            </td>
-                            <td className="py-4 pr-1 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                {user.id !== currentUser.id && (
-                                  <>
-                                    {user.type === 'customer' && !user.accessRevoked && (
-                                      <button
-                                        onClick={() => handleImpersonate(user)}
-                                        className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all duration-200"
-                                      >
-                                        Login As
-                                      </button>
-                                    )}
-                                    <button
-                                      onClick={() => updateUserRole(user.id, user.type === 'admin' ? 'customer' : 'admin')}
-                                      className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-200 border ${user.type === 'admin'
-                                        ? 'text-slate-400 border-slate-200 hover:bg-slate-100'
-                                        : 'text-rose-600 border-rose-100 hover:bg-rose-50'
-                                        }`}
-                                    >
-                                      {user.type === 'admin' ? 'Revoke Admin' : 'Make Admin'}
-                                    </button>
-                                    <button
-                                      onClick={() => toggleUserAccess(user.id, !user.accessRevoked)}
-                                      disabled={user.username === 'treys'}
-                                      className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-200 border ${user.accessRevoked
-                                        ? 'text-emerald-600 border-emerald-100 hover:bg-emerald-50'
-                                        : 'text-rose-600 border-rose-100 hover:bg-rose-50 disabled:opacity-30 disabled:hover:bg-transparent'
-                                        }`}
-                                    >
-                                      {user.accessRevoked ? 'Restore Access' : 'Revoke Access'}
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+            {/* Team & Security Management - Restricted to Super Admins */}
+            {currentUser && currentUser.isSuperAdmin && (
+              <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
+                <div
+                  className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
+                  onClick={() => toggleSection('team')}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.team ? 'bg-slate-100' : 'bg-rose-50'}`}>
+                    {collapsedSections.team ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Team & Security</h2>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Manage administrative access and permissions</p>
                   </div>
                 </div>
-              )}
-            </div>
+
+                {!collapsedSections.team && (
+                  <div className="animate-in fade-in duration-500">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-slate-50">
+                            <th className="pb-4 pl-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Username</th>
+                            <th className="pb-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Email</th>
+                            <th className="pb-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Current Role</th>
+                            <th className="pb-4 pr-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {allUsers.map((user) => (
+                            <tr key={user.id} className="group hover:bg-slate-50/30 transition-colors">
+                              <td className="py-4 pl-1 font-extrabold text-slate-900 text-sm">
+                                <div className="flex items-center gap-2">
+                                  {user.username}
+                                  {user.accessRevoked && (
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 text-[8px] font-black uppercase tracking-tighter border border-amber-100">
+                                      Revoked
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-4 text-slate-500 text-xs font-medium">{user.email || '-'}</td>
+                              <td className="py-4 text-center">
+                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${user.type === 'admin'
+                                  ? 'bg-rose-50 text-rose-600 border border-rose-100'
+                                  : 'bg-slate-50 text-slate-400 border border-slate-100'
+                                  }`}>
+                                  {user.type}
+                                </span>
+                              </td>
+                              <td className="py-4 pr-1 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  {user.id !== currentUser.id && (
+                                    <>
+                                      {user.type === 'customer' && !user.accessRevoked && (
+                                        <button
+                                          onClick={() => handleImpersonate(user)}
+                                          className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all duration-200"
+                                        >
+                                          Login As
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => updateUserRole(user.id, user.type === 'admin' ? 'customer' : 'admin')}
+                                        className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-200 border ${user.type === 'admin'
+                                          ? 'text-slate-400 border-slate-200 hover:bg-slate-100'
+                                          : 'text-rose-600 border-rose-100 hover:bg-rose-50'
+                                          }`}
+                                      >
+                                        {user.type === 'admin' ? 'Revoke Admin' : 'Make Admin'}
+                                      </button>
+                                      <button
+                                        onClick={() => toggleUserAccess(user.id, !user.accessRevoked)}
+                                        disabled={user.username === 'treys'}
+                                        className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-200 border ${user.accessRevoked
+                                          ? 'text-emerald-600 border-emerald-100 hover:bg-emerald-50'
+                                          : 'text-rose-600 border-rose-100 hover:bg-rose-50 disabled:opacity-30 disabled:hover:bg-transparent'
+                                          }`}
+                                      >
+                                        {user.accessRevoked ? 'Restore Access' : 'Revoke Access'}
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Supplier and Upload Management */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
