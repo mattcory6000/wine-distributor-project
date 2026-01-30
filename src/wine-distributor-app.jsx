@@ -61,13 +61,16 @@ const WineDistributorApp = () => {
   const [allUsers, setAllUsers] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState(null); // { id, name }
-  const [originalAdmin, setOriginalAdmin] = useState(null); // For "Login As" functionality
+  const [originalAdmin, setOriginalAdmin] = useState(null);
+  const [showImpersonationModal, setShowImpersonationModal] = useState(false);
+  const [impersonationSearch, setImpersonationSearch] = useState(''); // For "Login As" functionality
   const [selectedExtraFields, setSelectedExtraFields] = useState([]); // Extra columns to import
   const [catalogViewMode, setCatalogViewMode] = useState('grid'); // 'grid' or 'list' for customer catalog
   const [taxonomy, setTaxonomy] = useState({});
   const [useManualLocation, setUseManualLocation] = useState(false);
   const [priceRange, setPriceRange] = useState([0, 1000]); // [min, max]
   const [catalogPriceBounds, setCatalogPriceBounds] = useState({ min: 0, max: 1000 });
+  const [orderNotes, setOrderNotes] = useState({}); // { username: "note content" }
 
   // Initialize price bounds based on active products
   useEffect(() => {
@@ -158,6 +161,11 @@ const WineDistributorApp = () => {
         setAllCustomerLists(lists);
       }
 
+      const orderNotesResult = await window.storage.get('wine-order-notes');
+      if (orderNotesResult) {
+        setOrderNotes(JSON.parse(orderNotesResult.value));
+      }
+
       // Load Taxonomy
       try {
         const taxonomyResponse = await fetch('http://localhost:3001/api/storage/taxonomy');
@@ -193,6 +201,11 @@ const WineDistributorApp = () => {
   const saveSpecialOrderLists = async (newLists) => {
     setAllCustomerLists(newLists);
     await window.storage.set('wine-special-orders', JSON.stringify(newLists));
+  };
+
+  const saveOrderNotes = async (newNotes) => {
+    setOrderNotes(newNotes);
+    await window.storage.set('wine-order-notes', JSON.stringify(newNotes));
   };
 
   const saveFormulas = async (newFormulas) => {
@@ -375,6 +388,7 @@ const WineDistributorApp = () => {
     setCurrentUser(user);
     setView('customer');
     setSpecialOrderList(allCustomerLists[user.username] || []);
+    setSelectedCustomerForList(null); // Clear admin selection to avoid interference
     setShowList(false);
   };
 
@@ -807,7 +821,7 @@ const WineDistributorApp = () => {
         quantity: packSize,
         status: 'Requested',
         notes: '',
-        adminNotes: '',
+        adminNotes: originalAdmin ? `Added by ${originalAdmin.username}` : '',
         submitted: false
       }];
 
@@ -927,7 +941,8 @@ const WineDistributorApp = () => {
       status: 'updated',
       date: new Date().toISOString(),
       idealDeliveryDate: idealDeliveryDate,
-      mustHaveByDate: mustHaveByDate
+      mustHaveByDate: mustHaveByDate,
+      adminNote: orderNotes[username] || (originalAdmin ? `Created by ${originalAdmin.username} on behalf of ${username}` : null)
     };
 
     const updatedOrders = [...orders, orderSnapshot];
@@ -941,6 +956,7 @@ const WineDistributorApp = () => {
 
     await saveOrders(updatedOrders);
     await saveSpecialOrderLists(updatedAllLists);
+    await saveOrderNotes(orderNotes);
     setAllCustomerLists(updatedAllLists);
     setSpecialOrderList(submittedList);
 
@@ -979,6 +995,13 @@ const WineDistributorApp = () => {
     setTimeout(() => setUploadStatus(''), 3000);
   };
 
+  const handleUpdateOrderNote = async (orderId, note) => {
+    const updatedOrders = orders.map(order =>
+      order.id === orderId ? { ...order, adminNote: note } : order
+    );
+    await saveOrders(updatedOrders);
+  };
+
   const closeSidebar = () => {
     setShowList(false);
     setSelectedCustomerForList(null);
@@ -1015,6 +1038,7 @@ const WineDistributorApp = () => {
           'Item Total': (parseFloat(item.frontlinePrice) * item.quantity).toFixed(2),
           'Ideal Delivery Date': order.idealDeliveryDate ? new Date(order.idealDeliveryDate).toLocaleDateString() : '',
           'Must Have By Date': order.mustHaveByDate ? new Date(order.mustHaveByDate).toLocaleDateString() : '',
+          'Admin Note': order.adminNote || '',
           'Order Total': order.total
         });
       });
@@ -1426,17 +1450,20 @@ const WineDistributorApp = () => {
     <div className="min-h-screen bg-[#faf9f6]">
       <style>{`
         .range-slider-thumb {
-          pointer-events: none;
+          pointer-events: none !important;
         }
         .range-slider-thumb::-webkit-slider-thumb {
-          pointer-events: auto;
-          pointer-events: all;
-          cursor: pointer;
+          pointer-events: auto !important;
+          pointer-events: all !important;
+          cursor: grab !important;
         }
         .range-slider-thumb::-moz-range-thumb {
-          pointer-events: auto;
-          pointer-events: all;
-          cursor: pointer;
+          pointer-events: auto !important;
+          pointer-events: all !important;
+          cursor: grab !important;
+        }
+        .range-slider-thumb:active::-webkit-slider-thumb {
+          cursor: grabbing !important;
         }
       `}</style>
       {view === 'admin' ? (
@@ -1460,6 +1487,13 @@ const WineDistributorApp = () => {
                   <span className="text-sm font-bold tracking-tight">{currentUser.username}</span>
                 </div>
                 <button
+                  onClick={() => setShowImpersonationModal(true)}
+                  className="p-2.5 bg-white text-rose-600 border border-rose-100 hover:bg-rose-50 rounded-xl transition-all duration-200 shadow-sm"
+                  title="Login As Customer"
+                >
+                  <Users className="w-4 h-4" />
+                </button>
+                <button
                   onClick={handleLogout}
                   className="flex items-center space-x-2 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all duration-200 font-bold text-sm"
                 >
@@ -1469,6 +1503,61 @@ const WineDistributorApp = () => {
               </div>
             </div>
           </nav>
+
+          {/* Impersonation Modal */}
+          {showImpersonationModal && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-200">
+              <div
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                  <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Login As Customer</h3>
+                  <button
+                    onClick={() => setShowImpersonationModal(false)}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search customers..."
+                      value={impersonationSearch}
+                      onChange={(e) => setImpersonationSearch(e.target.value)}
+                      autoFocus
+                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-medium"
+                    />
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    {allUsers
+                      .filter(u => u.type === 'customer' && !u.accessRevoked && u.username.toLowerCase().includes(impersonationSearch.toLowerCase()))
+                      .map(user => (
+                        <button
+                          key={user.id}
+                          onClick={() => {
+                            handleImpersonate(user);
+                            setShowImpersonationModal(false);
+                          }}
+                          className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all group text-left"
+                        >
+                          <span className="font-bold text-slate-700 group-hover:text-slate-900">{user.username}</span>
+                          <span className="bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                            Select
+                          </span>
+                        </button>
+                      ))}
+                    {allUsers.filter(u => u.type === 'customer' && !u.accessRevoked && u.username.toLowerCase().includes(impersonationSearch.toLowerCase())).length === 0 && (
+                      <p className="text-center text-slate-400 text-sm py-4 italic">No matching customers found.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="p-8 max-w-7xl mx-auto">
 
@@ -1671,14 +1760,6 @@ const WineDistributorApp = () => {
                                 <div className="flex items-center justify-end gap-2">
                                   {user.id !== currentUser.id && (
                                     <>
-                                      {user.type === 'customer' && !user.accessRevoked && (
-                                        <button
-                                          onClick={() => handleImpersonate(user)}
-                                          className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all duration-200"
-                                        >
-                                          Login As
-                                        </button>
-                                      )}
                                       <button
                                         onClick={() => updateUserRole(user.id, user.type === 'admin' ? 'customer' : 'admin')}
                                         className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-200 border ${user.type === 'admin'
@@ -2106,6 +2187,23 @@ const WineDistributorApp = () => {
                                     <option value="cancelled">cancelled</option>
                                   </select>
                                 </div>
+                              </div>
+                            </div>
+
+                            {/* Admin Note Section */}
+                            <div className="mb-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Admin Note / Signature</label>
+                              <div className="relative">
+                                <Edit className="absolute left-3 top-3 w-3 h-3 text-slate-300 pointer-events-none" />
+                                <textarea
+                                  value={order.adminNote || ''}
+                                  onChange={(e) => handleUpdateOrderNote(order.id, e.target.value)}
+                                  placeholder="Add a note or signature..."
+                                  className="w-full pl-8 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-200 transition-all placeholder:text-slate-300 resize-none"
+                                  rows={1}
+                                  onFocus={(e) => e.target.rows = 3}
+                                  onBlur={(e) => e.target.rows = 1}
+                                />
                               </div>
                             </div>
 
@@ -3227,171 +3325,197 @@ const WineDistributorApp = () => {
             )}
           </div>
         </div>
-      )}
+      )
+      }
 
       {/* Special Order List Sidebar */}
-      {showList && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] animate-in fade-in duration-300" onClick={closeSidebar}>
-          <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-[-32px_0_128px_-16px_rgba(0,0,0,0.15)] overflow-hidden flex flex-col animate-in slide-in-from-right duration-500 ease-out" onClick={(e) => e.stopPropagation()}>
-            <div className="p-10 border-b border-slate-50 flex justify-between items-center bg-[#faf9f6]/80 backdrop-blur-sm sticky top-0 z-10 shrink-0">
-              <div>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">{selectedCustomerForList ? `${selectedCustomerForList}'s Request List` : 'My Request List'}</h2>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1.5 flex items-center">
-                  <span className="w-1 h-1 bg-rose-500 rounded-full mr-2"></span>
-                  Direct Procurement Request
-                </p>
-              </div>
-              <button onClick={closeSidebar} className="p-3 hover:bg-white rounded-2xl transition-all border border-transparent hover:border-slate-200 shadow-sm">
-                <X className="w-6 h-6 text-slate-400" />
-              </button>
-            </div>
-
-            <div className="flex-grow overflow-y-auto p-10 space-y-10 custom-scrollbar">
-              {specialOrderList.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
-                  <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center border border-slate-100 shadow-sm">
-                    <ClipboardList className="w-10 h-10 text-slate-200" />
-                  </div>
-                  <div>
-                    <p className="text-xl font-extrabold text-slate-900 tracking-tight">Request list is empty</p>
-                    <p className="text-sm text-slate-400 font-medium mt-1">Visit the catalog to reserve inventory.</p>
-                  </div>
+      {
+        showList && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] animate-in fade-in duration-300" onClick={closeSidebar}>
+            <div className="absolute right-0 top-0 h-full w-full max-w-xl bg-white shadow-[-32px_0_128px_-16px_rgba(0,0,0,0.15)] overflow-hidden flex flex-col animate-in slide-in-from-right duration-500 ease-out" onClick={(e) => e.stopPropagation()}>
+              <div className="p-10 border-b border-slate-50 flex justify-between items-center bg-[#faf9f6]/80 backdrop-blur-sm sticky top-0 z-10 shrink-0">
+                <div>
+                  <h2 className="text-3xl font-black text-slate-900 tracking-tighter uppercase">{selectedCustomerForList ? `${selectedCustomerForList}'s Request List` : 'My Request List'}</h2>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1.5 flex items-center">
+                    <span className="w-1 h-1 bg-rose-500 rounded-full mr-2"></span>
+                    Direct Procurement Request
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-6">
-                  {specialOrderList.map(item => (
-                    <div key={item.id} className="bg-white border border-slate-100 rounded-[2rem] p-8 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 group">
-                      <div className="flex justify-between items-start mb-6">
-                        <div className="flex-1 pr-6">
-                          <div className="flex items-center space-x-2 mb-1">
-                            <p className="font-black text-lg text-slate-900 tracking-tight uppercase group-hover:text-rose-600 transition-colors">{item.producer}</p>
-                            {item.hasUnseenUpdate && (
-                              <span className="text-[8px] font-black text-white bg-rose-500 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">New Update</span>
-                            )}
+                <button onClick={closeSidebar} className="p-3 hover:bg-white rounded-2xl transition-all border border-transparent hover:border-slate-200 shadow-sm">
+                  <X className="w-6 h-6 text-slate-400" />
+                </button>
+              </div>
+
+              <div className="flex-grow overflow-y-auto p-10 space-y-10 custom-scrollbar">
+                {currentUser && currentUser.type === 'admin' && (
+                  <div className="bg-amber-50/50 border border-amber-100 rounded-[2rem] p-6 mb-6">
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest ml-1">Admin Order Note</label>
+                      {orderNotes[selectedCustomerForList || currentUser.username] && (
+                        <span className="text-[9px] font-bold text-amber-400 bg-white px-2 py-0.5 rounded-md border border-amber-100">
+                          Will be attached to order history
+                        </span>
+                      )}
+                    </div>
+                    <textarea
+                      value={orderNotes[selectedCustomerForList || currentUser.username] || ''}
+                      onChange={(e) => {
+                        const user = selectedCustomerForList || currentUser.username;
+                        setOrderNotes(prev => ({ ...prev, [user]: e.target.value }));
+                      }}
+                      placeholder="Add internal notes for this order (e.g. 'Packed by JB', 'Delivery verified')..."
+                      rows="2"
+                      className="w-full px-5 py-3 bg-white border border-amber-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500/10 focus:border-amber-500 transition-all font-medium text-xs text-slate-600"
+                    />
+                  </div>
+                )}
+
+                {specialOrderList.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-center space-y-6">
+                    <div className="w-24 h-24 bg-slate-50 rounded-[2.5rem] flex items-center justify-center border border-slate-100 shadow-sm">
+                      <ClipboardList className="w-10 h-10 text-slate-200" />
+                    </div>
+                    <div>
+                      <p className="text-xl font-extrabold text-slate-900 tracking-tight">Request list is empty</p>
+                      <p className="text-sm text-slate-400 font-medium mt-1">Visit the catalog to reserve inventory.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {specialOrderList.map(item => (
+                      <div key={item.id} className="bg-white border border-slate-100 rounded-[2rem] p-8 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 group">
+                        <div className="flex justify-between items-start mb-6">
+                          <div className="flex-1 pr-6">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <p className="font-black text-lg text-slate-900 tracking-tight uppercase group-hover:text-rose-600 transition-colors">{item.producer}</p>
+                              {item.hasUnseenUpdate && (
+                                <span className="text-[8px] font-black text-white bg-rose-500 px-2 py-0.5 rounded-full uppercase tracking-widest animate-pulse">New Update</span>
+                              )}
+                            </div>
+                            <p className="text-sm text-slate-500 font-medium">{item.productName}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">${item.frontlinePrice} / unit frontline</p>
                           </div>
-                          <p className="text-sm text-slate-500 font-medium">{item.productName}</p>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">${item.frontlinePrice} / unit frontline</p>
-                        </div>
-                        {(!item.submitted || currentUser.type === 'admin') && (
-                          <button
-                            onClick={() => removeFromList(item.id)}
-                            className="p-3 bg-slate-50 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-transparent group-hover:bg-rose-50 group-hover:border-rose-100 shadow-sm"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-6 mb-8">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Order Cases</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={item.cases}
-                            onChange={(e) => updateListUnits(item.id, 'cases', e.target.value)}
-                            disabled={item.submitted && currentUser.type === 'customer'}
-                            className={`w-full px-5 py-3 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-mono font-black ${item.submitted && currentUser.type === 'customer' ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
-                            placeholder="0"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Order Bottles</label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={item.bottles}
-                            onChange={(e) => updateListUnits(item.id, 'bottles', e.target.value)}
-                            disabled={item.submitted && currentUser.type === 'customer'}
-                            className={`w-full px-5 py-3 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-mono font-black ${item.submitted && currentUser.type === 'customer' ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="pt-6 border-t border-slate-50 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Procurement Status</span>
-                          {currentUser.type === 'admin' ? (
-                            <select
-                              value={item.status || 'Requested'}
-                              onChange={(e) => updateListItemMetadata(item.id, e.target.value, item.notes)}
-                              className="text-[10px] font-bold uppercase tracking-widest bg-slate-50 border border-slate-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-rose-500/10 transition-all cursor-pointer"
+                          {(!item.submitted || currentUser.type === 'admin') && (
+                            <button
+                              onClick={() => removeFromList(item.id)}
+                              className="p-3 bg-slate-50 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-transparent group-hover:bg-rose-50 group-hover:border-rose-100 shadow-sm"
                             >
-                              <option value="Requested">Requested</option>
-                              <option value="ERP Item Created">ERP Item Created</option>
-                              <option value="Sample Pending">Sample Pending</option>
-                              <option value="Ordered">Ordered</option>
-                              <option value="Ordered from Supplier">Ordered from Supplier</option>
-                              <option value="Pending Arrival">Pending Arrival</option>
-                              <option value="In Stock">In Stock</option>
-                              <option value="Backordered">Backordered</option>
-                              <option value="Out of Stock">Out of Stock</option>
-                              <option value="Delivered">Delivered</option>
-                            </select>
-                          ) : (
-                            <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border ${(item.status || 'Requested').toUpperCase().includes('REQUESTED') ? 'bg-slate-50 text-slate-400 border-slate-100' :
-                              (item.status || '').toUpperCase().includes('ORDERED') ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                (item.status || '').toUpperCase().includes('STOCK') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                  (item.status || '').toUpperCase().includes('BACKORDERED') ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                    (item.status || '').toUpperCase().includes('PENDING') ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
-                                      (item.status || '').toUpperCase().includes('DELIVERED') ? 'bg-green-50 text-green-700 border-green-100' :
-                                        'bg-rose-50 text-rose-600 border-rose-100'
-                              }`}>
-                              {item.status || 'Requested'}
-                            </span>
+                              <X className="w-4 h-4" />
+                            </button>
                           )}
                         </div>
 
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Request Notes</label>
-                          <textarea
-                            value={item.notes}
-                            onChange={(e) => updateListItemMetadata(item.id, item.status, e.target.value)}
-                            disabled={item.submitted && currentUser.type === 'customer'}
-                            placeholder="Add memo for distributor..."
-                            rows="2"
-                            className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-medium text-xs text-slate-500 disabled:opacity-50"
-                          />
+                        <div className="grid grid-cols-2 gap-6 mb-8">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Order Cases</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.cases}
+                              onChange={(e) => updateListUnits(item.id, 'cases', e.target.value)}
+                              disabled={item.submitted && currentUser.type === 'customer'}
+                              className={`w-full px-5 py-3 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-mono font-black ${item.submitted && currentUser.type === 'customer' ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+                              placeholder="0"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Order Bottles</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.bottles}
+                              onChange={(e) => updateListUnits(item.id, 'bottles', e.target.value)}
+                              disabled={item.submitted && currentUser.type === 'customer'}
+                              className={`w-full px-5 py-3 border rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-mono font-black ${item.submitted && currentUser.type === 'customer' ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+                              placeholder="0"
+                            />
+                          </div>
                         </div>
 
-                        {(currentUser.type === 'admin' || item.adminNotes) && (
-                          <div className="space-y-1.5 pt-2">
-                            <label className="text-[10px] font-black text-rose-600 uppercase tracking-widest ml-1">Admin Comments</label>
+                        <div className="pt-6 border-t border-slate-50 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Procurement Status</span>
                             {currentUser.type === 'admin' ? (
-                              <textarea
-                                value={item.adminNotes || ''}
-                                onChange={(e) => updateListItemMetadata(item.id, item.status, item.notes, e.target.value)}
-                                placeholder="Update status comments for customer..."
-                                rows="2"
-                                className="w-full px-5 py-4 bg-rose-50/30 border border-rose-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-medium text-xs text-slate-600"
-                              />
+                              <select
+                                value={item.status || 'Requested'}
+                                onChange={(e) => updateListItemMetadata(item.id, e.target.value, item.notes)}
+                                className="text-[10px] font-bold uppercase tracking-widest bg-slate-50 border border-slate-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-rose-500/10 transition-all cursor-pointer"
+                              >
+                                <option value="Requested">Requested</option>
+                                <option value="ERP Item Created">ERP Item Created</option>
+                                <option value="Sample Pending">Sample Pending</option>
+                                <option value="Ordered">Ordered</option>
+                                <option value="Ordered from Supplier">Ordered from Supplier</option>
+                                <option value="Pending Arrival">Pending Arrival</option>
+                                <option value="In Stock">In Stock</option>
+                                <option value="Backordered">Backordered</option>
+                                <option value="Out of Stock">Out of Stock</option>
+                                <option value="Delivered">Delivered</option>
+                              </select>
                             ) : (
-                              <div className="px-5 py-4 bg-rose-50/50 border border-rose-100 rounded-2xl font-medium text-xs text-rose-700">
-                                {item.adminNotes}
-                              </div>
+                              <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border ${(item.status || 'Requested').toUpperCase().includes('REQUESTED') ? 'bg-slate-50 text-slate-400 border-slate-100' :
+                                (item.status || '').toUpperCase().includes('ORDERED') ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                  (item.status || '').toUpperCase().includes('STOCK') ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                    (item.status || '').toUpperCase().includes('BACKORDERED') ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                      (item.status || '').toUpperCase().includes('PENDING') ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                                        (item.status || '').toUpperCase().includes('DELIVERED') ? 'bg-green-50 text-green-700 border-green-100' :
+                                          'bg-rose-50 text-rose-600 border-rose-100'
+                                }`}>
+                                {item.status || 'Requested'}
+                              </span>
                             )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
 
-            <div className="p-10 bg-white border-t border-slate-100 sticky bottom-0 z-10 shrink-0">
-              <button
-                onClick={submitListUpdate}
-                className="w-full bg-[#1a1a1a] text-white py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-800 transition-all duration-300 shadow-xl shadow-slate-100 active:scale-[0.98]"
-              >
-                {currentUser.type === 'admin' ? 'Update' : 'Submit/Update Request'}
-              </button>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Request Notes</label>
+                            <textarea
+                              value={item.notes}
+                              onChange={(e) => updateListItemMetadata(item.id, item.status, e.target.value)}
+                              disabled={item.submitted && currentUser.type === 'customer'}
+                              placeholder="Add memo for distributor..."
+                              rows="2"
+                              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-medium text-xs text-slate-500 disabled:opacity-50"
+                            />
+                          </div>
+
+                          {(currentUser.type === 'admin' || item.adminNotes) && (
+                            <div className="space-y-1.5 pt-2">
+                              <label className="text-[10px] font-black text-rose-600 uppercase tracking-widest ml-1">Admin Comments</label>
+                              {currentUser.type === 'admin' ? (
+                                <textarea
+                                  value={item.adminNotes || ''}
+                                  onChange={(e) => updateListItemMetadata(item.id, item.status, item.notes, e.target.value)}
+                                  placeholder="Update status comments for customer..."
+                                  rows="2"
+                                  className="w-full px-5 py-4 bg-rose-50/30 border border-rose-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-medium text-xs text-slate-600"
+                                />
+                              ) : (
+                                <div className="px-5 py-4 bg-rose-50/50 border border-rose-100 rounded-2xl font-medium text-xs text-rose-700">
+                                  {item.adminNotes}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-10 bg-white border-t border-slate-100 sticky bottom-0 z-10 shrink-0">
+                <button
+                  onClick={submitListUpdate}
+                  className="w-full bg-[#1a1a1a] text-white py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-slate-800 transition-all duration-300 shadow-xl shadow-slate-100 active:scale-[0.98]"
+                >
+                  {currentUser.type === 'admin' ? 'Update' : 'Submit/Update Request'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 };
 

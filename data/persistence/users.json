@@ -137,5 +137,19 @@
     "type": "admin",
     "isSuperAdmin": true,
     "email": "matt.cory@gmail.com"
+  },
+  {
+    "id": "user-1769740604237",
+    "username": "Matt",
+    "password": "password",
+    "type": "customer",
+    "email": "matt@aocwines.com"
+  },
+  {
+    "id": "user-1769740762551",
+    "username": "Admin",
+    "password": "password",
+    "type": "customer",
+    "email": "admin@aocwines.com"
   }
 ]
