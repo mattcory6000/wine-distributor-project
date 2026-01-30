@@ -33,6 +33,9 @@ const WineDistributorApp = () => {
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSupplier, setSelectedSupplier] = useState('all');
+  const [selectedCountry, setSelectedCountry] = useState('all');
+  const [selectedRegion, setSelectedRegion] = useState('all');
+  const [selectedAppellation, setSelectedAppellation] = useState('all');
   const [specialOrderList, setSpecialOrderList] = useState([]); // Currently active list
   const [allCustomerLists, setAllCustomerLists] = useState({}); // { username: [items] }
   const [showList, setShowList] = useState(false);
@@ -61,6 +64,17 @@ const WineDistributorApp = () => {
   const [originalAdmin, setOriginalAdmin] = useState(null); // For "Login As" functionality
   const [selectedExtraFields, setSelectedExtraFields] = useState([]); // Extra columns to import
   const [catalogViewMode, setCatalogViewMode] = useState('grid'); // 'grid' or 'list' for customer catalog
+  const [taxonomy, setTaxonomy] = useState({});
+  const [useManualLocation, setUseManualLocation] = useState(false);
+
+  // Initialize manual mode based on product data validity against taxonomy
+  useEffect(() => {
+    if (editingProduct && taxonomy && Object.keys(taxonomy).length > 0) {
+      // If country is present but not in taxonomy, default to manual
+      const isKnownCountry = !editingProduct.country || taxonomy[editingProduct.country];
+      setUseManualLocation(!isKnownCountry);
+    }
+  }, [editingProduct, taxonomy]);
 
   const toggleSection = (section) => {
     setCollapsedSections(prev => ({
@@ -126,6 +140,19 @@ const WineDistributorApp = () => {
       if (specialOrdersResult) {
         const lists = JSON.parse(specialOrdersResult.value);
         setAllCustomerLists(lists);
+      }
+
+      // Load Taxonomy
+      try {
+        const taxonomyResponse = await fetch('http://localhost:3001/api/storage/taxonomy');
+        if (taxonomyResponse.ok) {
+          const taxonomyData = await taxonomyResponse.json();
+          if (taxonomyData && taxonomyData.value) {
+            setTaxonomy(JSON.parse(taxonomyData.value));
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load taxonomy', e);
       }
     } catch (error) {
       console.log('No existing data found, starting fresh');
@@ -1140,9 +1167,37 @@ const WineDistributorApp = () => {
       product.appellation?.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchesSupplier = selectedSupplier === 'all' || product.supplier === selectedSupplier;
+    const matchesCountry = selectedCountry === 'all' || (product.country && product.country.toLowerCase() === selectedCountry.toLowerCase());
+    const matchesRegion = selectedRegion === 'all' || (product.region && product.region.toLowerCase() === selectedRegion.toLowerCase());
+    const matchesAppellation = selectedAppellation === 'all' || (product.appellation && product.appellation.toLowerCase() === selectedAppellation.toLowerCase());
 
-    return matchesSearch && matchesSupplier;
+    return matchesSearch && matchesSupplier && matchesCountry && matchesRegion && matchesAppellation;
   });
+
+  const uniqueCountries = [...new Set(products.map(p => p.country).filter(Boolean))].sort();
+
+  const availableRegions = products
+    .filter(p => selectedCountry === 'all' || (p.country && p.country.toLowerCase() === selectedCountry.toLowerCase()))
+    .map(p => p.region)
+    .filter(Boolean);
+  const uniqueRegions = [...new Set(availableRegions)].sort();
+
+  const availableAppellations = products
+    .filter(p =>
+      (selectedCountry === 'all' || (p.country && p.country.toLowerCase() === selectedCountry.toLowerCase())) &&
+      (selectedRegion === 'all' || (p.region && p.region.toLowerCase() === selectedRegion.toLowerCase()))
+    )
+    .map(p => p.appellation)
+    .filter(Boolean);
+  const uniqueAppellations = [...new Set(availableAppellations)].sort();
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setSelectedSupplier('all');
+    setSelectedCountry('all');
+    setSelectedRegion('all');
+    setSelectedAppellation('all');
+  };
 
   const suppliers = [...new Set(products.map(p => p.supplier))];
 
@@ -2520,6 +2575,110 @@ const WineDistributorApp = () => {
                           className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-bold text-sm"
                         />
                       </div>
+
+                      {/* Location / Origin Section */}
+                      <div className="md:col-span-2 pt-4 pb-2 border-t border-slate-100 mt-2">
+                        <div className="flex justify-between items-end mb-2">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Origin Details</label>
+                          <button
+                            type="button"
+                            onClick={() => setUseManualLocation(!useManualLocation)}
+                            className="text-[10px] font-bold text-rose-500 uppercase tracking-widest hover:text-rose-600 transition-colors"
+                          >
+                            {useManualLocation ? 'Switch to Smart Select' : 'Switch to Manual Entry'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {useManualLocation ? (
+                        <>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Country</label>
+                            <input
+                              type="text"
+                              value={editingProduct.country || ''}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, country: e.target.value })}
+                              className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-bold text-sm"
+                              placeholder="e.g. France"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Region</label>
+                            <input
+                              type="text"
+                              value={editingProduct.region || ''}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, region: e.target.value })}
+                              className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-bold text-sm"
+                              placeholder="e.g. Bordeaux"
+                            />
+                          </div>
+                          <div className="md:col-span-2 space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Appellation</label>
+                            <input
+                              type="text"
+                              value={editingProduct.appellation || ''}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, appellation: e.target.value })}
+                              className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-bold text-sm"
+                              placeholder="e.g. Margaux"
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Country</label>
+                            <div className="relative">
+                              <select
+                                value={editingProduct.country || ''}
+                                onChange={(e) => setEditingProduct({ ...editingProduct, country: e.target.value, region: '', appellation: '' })}
+                                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-bold text-sm appearance-none"
+                              >
+                                <option value="">Select Country...</option>
+                                {Object.keys(taxonomy).sort().map(c => (
+                                  <option key={c} value={c}>{c}</option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Region</label>
+                            <div className="relative">
+                              <select
+                                value={editingProduct.region || ''}
+                                onChange={(e) => setEditingProduct({ ...editingProduct, region: e.target.value, appellation: '' })}
+                                disabled={!editingProduct.country}
+                                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-bold text-sm appearance-none disabled:opacity-50"
+                              >
+                                <option value="">Select Region...</option>
+                                {editingProduct.country && taxonomy[editingProduct.country] && Object.keys(taxonomy[editingProduct.country]).sort().map(r => (
+                                  <option key={r} value={r}>{r}</option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            </div>
+                          </div>
+
+                          <div className="md:col-span-2 space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Appellation</label>
+                            <div className="relative">
+                              <select
+                                value={editingProduct.appellation || ''}
+                                onChange={(e) => setEditingProduct({ ...editingProduct, appellation: e.target.value })}
+                                disabled={!editingProduct.region}
+                                className="w-full px-5 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-bold text-sm appearance-none disabled:opacity-50"
+                              >
+                                <option value="">Select Appellation...</option>
+                                {editingProduct.country && editingProduct.region && taxonomy[editingProduct.country] && taxonomy[editingProduct.country][editingProduct.region] && taxonomy[editingProduct.country][editingProduct.region].sort().map(a => (
+                                  <option key={a} value={a}>{a}</option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            </div>
+                          </div>
+                        </>
+                      )}
                       <div className="md:col-span-2 space-y-1.5">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Full Wine/Product Name</label>
                         <input
@@ -2736,49 +2895,106 @@ const WineDistributorApp = () => {
           <div className="max-w-7xl mx-auto p-8">
             {/* Search and Discovery */}
             <div className="bg-white rounded-[2rem] p-8 mb-10 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100/80">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Search Collection</label>
-                  <div className="relative group flex items-center space-x-4">
-                    <div className="relative flex-grow">
-                      <Search className="absolute left-5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-300 group-focus-within:text-rose-500 transition-colors" />
-                      <input
-                        type="text"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Vintage, producer, or vineyard name..."
-                        className="w-full pl-14 pr-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-rose-500/5 focus:border-rose-500/50 transition-all placeholder:text-slate-300 font-medium"
-                      />
-                    </div>
-                    <div className="flex bg-slate-100 p-1 rounded-2xl shrink-0">
-                      <button
-                        onClick={() => setCatalogViewMode('grid')}
-                        className={`p-2.5 rounded-xl transition-all ${catalogViewMode === 'grid' ? 'bg-white shadow-md text-rose-600' : 'text-slate-400 hover:text-slate-600'}`}
-                      >
-                        <LayoutGrid className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => setCatalogViewMode('list')}
-                        className={`p-2.5 rounded-xl transition-all ${catalogViewMode === 'list' ? 'bg-white shadow-md text-rose-600' : 'text-slate-400 hover:text-slate-600'}`}
-                      >
-                        <List className="w-5 h-5" />
-                      </button>
-                    </div>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Search Collection</h2>
+                <button
+                  onClick={resetFilters}
+                  className="text-[10px] font-bold uppercase tracking-widest text-rose-500 hover:text-rose-700 transition-colors flex items-center"
+                >
+                  <X className="w-3 h-3 mr-1" />
+                  Reset Filters
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div className="md:col-span-2 lg:col-span-1 space-y-1.5">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Search</label>
+                  <div className="relative group">
+                    <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-300 group-focus-within:text-rose-500 transition-colors" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Name, vintage, producer..."
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500/50 transition-all placeholder:text-slate-300 font-bold text-xs"
+                    />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Filter by Source</label>
+
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Country</label>
+                  <div className="relative">
+                    <select
+                      value={selectedCountry}
+                      onChange={(e) => setSelectedCountry(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500/50 transition-all font-bold text-xs appearance-none cursor-pointer pr-8 text-slate-700 truncate"
+                    >
+                      <option value="all">All Countries</option>
+                      {uniqueCountries.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Region</label>
+                  <div className="relative">
+                    <select
+                      value={selectedRegion}
+                      onChange={(e) => setSelectedRegion(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500/50 transition-all font-bold text-xs appearance-none cursor-pointer pr-8 text-slate-700 truncate"
+                    >
+                      <option value="all">All Regions</option>
+                      {uniqueRegions.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Appellation</label>
+                  <div className="relative">
+                    <select
+                      value={selectedAppellation}
+                      onChange={(e) => setSelectedAppellation(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500/50 transition-all font-bold text-xs appearance-none cursor-pointer pr-8 text-slate-700 truncate"
+                    >
+                      <option value="all">All Appellations</option>
+                      {uniqueAppellations.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Distributor / Portfolio</label>
                   <div className="relative">
                     <select
                       value={selectedSupplier}
                       onChange={(e) => setSelectedSupplier(e.target.value)}
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-rose-500/5 focus:border-rose-500/50 transition-all font-bold text-sm appearance-none cursor-pointer pr-12 text-slate-700"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500/50 transition-all font-bold text-xs appearance-none cursor-pointer pr-8 text-slate-700"
                     >
                       <option value="all">All Suppliers and Offers</option>
                       {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <ChevronDown className="absolute right-5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
                   </div>
+                </div>
+                <div className="flex items-end justify-end space-x-2">
+                  <button
+                    onClick={() => setCatalogViewMode('grid')}
+                    className={`p-3 rounded-xl transition-all ${catalogViewMode === 'grid' ? 'bg-white shadow-md text-rose-600 border border-slate-100' : 'text-slate-400 hover:text-slate-600 border border-transparent'}`}
+                  >
+                    <LayoutGrid className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setCatalogViewMode('list')}
+                    className={`p-3 rounded-xl transition-all ${catalogViewMode === 'list' ? 'bg-white shadow-md text-rose-600 border border-slate-100' : 'text-slate-400 hover:text-slate-600 border border-transparent'}`}
+                  >
+                    <List className="w-5 h-5" />
+                  </button>
                 </div>
               </div>
             </div>
