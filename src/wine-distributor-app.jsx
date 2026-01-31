@@ -819,6 +819,7 @@ const WineDistributorApp = () => {
         cases: 1,
         bottles: 0,
         quantity: packSize,
+        requestedQuantity: packSize,
         status: 'Requested',
         notes: '',
         adminNotes: originalAdmin ? `Added by ${originalAdmin.username}` : '',
@@ -854,7 +855,8 @@ const WineDistributorApp = () => {
         return {
           ...item,
           ...newUnits,
-          quantity: totalQuantity
+          quantity: totalQuantity,
+          requestedQuantity: item.submitted ? item.requestedQuantity : totalQuantity
         };
       }
       return item;
@@ -873,6 +875,41 @@ const WineDistributorApp = () => {
   const updateListItemMetadata = async (productId, status, notes, adminNotes) => {
     const username = selectedCustomerForList || currentUser.username;
     const userList = allCustomerLists[username] || [];
+
+    if (status === 'Delivered' || status === 'Out of Stock') {
+      const itemToDeliver = userList.find(item => item.id === productId);
+      if (itemToDeliver) {
+        // Create an "Order" snapshot for history
+        const deliverySnapshot = {
+          id: `archive-${Date.now()}`,
+          customer: username,
+          items: [{
+            ...itemToDeliver,
+            status: status,
+            notes: notes !== undefined ? notes : itemToDeliver.notes,
+            adminNotes: adminNotes !== undefined ? adminNotes : itemToDeliver.adminNotes
+          }],
+          total: status === 'Delivered' ? (parseFloat(itemToDeliver.frontlinePrice) * (itemToDeliver.quantity || 1)).toFixed(2) : "0.00",
+          status: 'closed',
+          date: new Date().toISOString(),
+          adminNote: `${status === 'Delivered' ? 'Delivered' : 'Archived (Out of Stock)'} item: ${itemToDeliver.producer} ${itemToDeliver.productName}`
+        };
+
+        const updatedOrders = [...orders, deliverySnapshot];
+        const updatedList = userList.filter(item => item.id !== productId);
+        const updatedAllLists = {
+          ...allCustomerLists,
+          [username]: updatedList
+        };
+
+        await saveOrders(updatedOrders);
+        await saveSpecialOrderLists(updatedAllLists);
+        setAllCustomerLists(updatedAllLists);
+        setSpecialOrderList(updatedList);
+        return;
+      }
+    }
+
     const newList = userList.map(item => {
       if (item.id === productId) {
         return {
@@ -2168,24 +2205,9 @@ const WineDistributorApp = () => {
 
                               <div className="flex flex-col md:items-end w-full md:w-auto">
                                 <p className="text-2xl font-extrabold text-slate-900 tracking-tighter mb-2 font-mono">${order.total}</p>
-                                <div className="relative inline-block">
-                                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-                                  <select
-                                    value={order.status}
-                                    onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                                    className={`appearance-none pl-4 pr-10 py-1.5 text-[10px] rounded-full font-bold uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-rose-500/10 border transition-all cursor-pointer ${order.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                                      order.status === 'cancelled' ? 'bg-rose-50 text-rose-700 border-rose-100' :
-                                        order.status === 'confirmed' ? 'bg-blue-50 text-blue-700 border-blue-100' :
-                                          'bg-amber-50 text-amber-700 border-amber-100'
-                                      }`}
-                                  >
-                                    <option value="pending">pending</option>
-                                    <option value="confirmed">confirmed</option>
-                                    <option value="shipped">shipped</option>
-                                    <option value="delivered">delivered</option>
-                                    <option value="completed">completed</option>
-                                    <option value="cancelled">cancelled</option>
-                                  </select>
+                                <div className="inline-flex items-center space-x-2 px-4 py-1.5 bg-slate-900 text-white rounded-full font-black text-[10px] uppercase tracking-[0.2em] shadow-sm">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                                  <span>Archive Closed</span>
                                 </div>
                               </div>
                             </div>
@@ -2215,20 +2237,51 @@ const WineDistributorApp = () => {
                                 </summary>
                                 <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-slate-50/30">
                                   <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="bg-slate-100/50 border-b border-slate-100">
+                                        <th className="py-2 px-4 text-left font-black text-[10px] text-slate-500 uppercase tracking-widest">Wine / Producer</th>
+                                        <th className="py-2 px-4 text-left font-black text-[10px] text-slate-500 uppercase tracking-widest">Fulfillment Status</th>
+                                        <th className="py-2 px-4 text-right font-black text-[10px] text-slate-500 uppercase tracking-widest">Fulfillment Ratio</th>
+                                        <th className="py-2 px-4 text-right font-black text-[10px] text-slate-500 uppercase tracking-widest">Total Price</th>
+                                      </tr>
+                                    </thead>
                                     <tbody className="divide-y divide-slate-100">
                                       {order.items.map((item, idx) => {
                                         const isDiscontinued = discontinuedProducts.find(d => d.id === item.id);
+                                        const isDelivered = (item.status || '').toUpperCase() === 'DELIVERED';
+
                                         return (
-                                          <tr key={idx} className="hover:bg-white transition-colors">
-                                            <td className="py-3 px-4 flex items-center space-x-2">
-                                              {isDiscontinued && <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" title="Discontinued"></span>}
-                                              <span className={`font-bold ${isDiscontinued ? 'text-amber-800' : 'text-slate-700'}`}>{item.producer}</span>
+                                          <tr key={idx} className="hover:bg-white transition-colors group">
+                                            <td className="py-3 px-4">
+                                              <div className="flex flex-col">
+                                                <div className="flex items-center space-x-2">
+                                                  {isDiscontinued && <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" title="Discontinued"></span>}
+                                                  <span className={`font-extrabold ${isDiscontinued ? 'text-amber-800' : 'text-slate-900'} uppercase tracking-tight`}>{item.producer}</span>
+                                                </div>
+                                                <span className="text-slate-500 font-medium italic mt-0.5">{item.productName}</span>
+                                              </div>
                                             </td>
-                                            <td className="py-3 px-4 text-slate-500 font-medium italic">{item.productName}</td>
+                                            <td className="py-3 px-4">
+                                              <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${isDelivered
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                : 'bg-rose-50 text-rose-700 border-rose-100'
+                                                }`}>
+                                                {item.status || 'Archived'}
+                                              </span>
+                                            </td>
                                             <td className="py-3 px-4 text-right">
-                                              <span className="font-bold text-slate-900 bg-white shadow-sm border border-slate-100 px-2 py-0.5 rounded-md">×{item.quantity}</span>
+                                              <div className="flex flex-col items-end">
+                                                <span className="font-black text-slate-900 bg-white shadow-sm border border-slate-100 px-2 py-0.5 rounded-lg">
+                                                  {isDelivered ? item.quantity : 0} / {item.requestedQuantity || item.quantity}
+                                                </span>
+                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-1">
+                                                  Units Fulfilled
+                                                </span>
+                                              </div>
                                             </td>
-                                            <td className="py-3 px-4 text-right font-bold text-slate-600 font-mono">${(parseFloat(item.frontlinePrice) * item.quantity).toFixed(2)}</td>
+                                            <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
+                                              ${(parseFloat(item.frontlinePrice) * (isDelivered ? item.quantity : 0)).toFixed(2)}
+                                            </td>
                                           </tr>
                                         );
                                       })}
@@ -2294,134 +2347,136 @@ const WineDistributorApp = () => {
             </div>
 
             {/* Pricing Formulas (AOC) */}
-            <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
-              <div
-                className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
-                onClick={() => toggleSection('formulas')}
-              >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.formulas ? 'bg-slate-100' : 'bg-rose-50'}`}>
-                  {collapsedSections.formulas ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
+            {currentUser.isSuperAdmin && (
+              <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 mb-10 overflow-hidden">
+                <div
+                  className="flex items-center mb-8 cursor-pointer hover:bg-slate-50/50 p-3 -m-3 rounded-2xl transition-all duration-200 group"
+                  onClick={() => toggleSection('formulas')}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 transition-all duration-300 ${collapsedSections.formulas ? 'bg-slate-100' : 'bg-rose-50'}`}>
+                    {collapsedSections.formulas ? <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-slate-600" /> : <ChevronDown className="w-5 h-5 text-rose-600" />}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Calculation Engine</h2>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Pricing algorithms & tax configuration</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Calculation Engine</h2>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5 group-hover:text-slate-700 transition-colors">Pricing algorithms & tax configuration</p>
-                </div>
-              </div>
 
-              {!collapsedSections.formulas && (
-                <div className="animate-in fade-in duration-500">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {Object.entries(formulas).map(([type, formula]) => (
-                      <div key={type} className="bg-slate-50/50 border border-slate-100 rounded-3xl p-6 hover:bg-white hover:border-rose-100 hover:shadow-sm transition-all duration-300">
-                        <h3 className="text-sm font-extrabold text-slate-900 mb-6 uppercase tracking-[0.15em] flex items-center">
-                          <span className="w-1.5 h-1.5 bg-rose-500 rounded-full mr-2"></span>
-                          {type}
-                        </h3>
-                        <div className="space-y-5">
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tax per Liter ($)</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={formula.taxPerLiter}
-                              onChange={(e) => {
-                                const newFormulas = {
-                                  ...formulas,
-                                  [type]: { ...formula, taxPerLiter: parseFloat(e.target.value) || 0 }
-                                };
-                                saveFormulas(newFormulas);
-                              }}
-                              className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Fixed Tax ($)</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={formula.taxFixed}
-                              onChange={(e) => {
-                                const newFormulas = {
-                                  ...formulas,
-                                  [type]: { ...formula, taxFixed: parseFloat(e.target.value) || 0 }
-                                };
-                                saveFormulas(newFormulas);
-                              }}
-                              className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Shipping / Case ($)</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={formula.shippingPerCase}
-                              onChange={(e) => {
-                                const newFormulas = {
-                                  ...formulas,
-                                  [type]: { ...formula, shippingPerCase: parseFloat(e.target.value) || 0 }
-                                };
-                                saveFormulas(newFormulas);
-                              }}
-                              className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Margin Divisor</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={formula.marginDivisor}
-                              onChange={(e) => {
-                                const newFormulas = {
-                                  ...formulas,
-                                  [type]: { ...formula, marginDivisor: parseFloat(e.target.value) || 0.65 }
-                                };
-                                saveFormulas(newFormulas);
-                              }}
-                              className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">SRP Multiplier</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={formula.srpMultiplier}
-                              onChange={(e) => {
-                                const newFormulas = {
-                                  ...formulas,
-                                  [type]: { ...formula, srpMultiplier: parseFloat(e.target.value) || 1.47 }
-                                };
-                                saveFormulas(newFormulas);
-                              }}
-                              className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
-                            />
+                {!collapsedSections.formulas && (
+                  <div className="animate-in fade-in duration-500">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                      {Object.entries(formulas).map(([type, formula]) => (
+                        <div key={type} className="bg-slate-50/50 border border-slate-100 rounded-3xl p-6 hover:bg-white hover:border-rose-100 hover:shadow-sm transition-all duration-300">
+                          <h3 className="text-sm font-extrabold text-slate-900 mb-6 uppercase tracking-[0.15em] flex items-center">
+                            <span className="w-1.5 h-1.5 bg-rose-500 rounded-full mr-2"></span>
+                            {type}
+                          </h3>
+                          <div className="space-y-5">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Tax per Liter ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={formula.taxPerLiter}
+                                onChange={(e) => {
+                                  const newFormulas = {
+                                    ...formulas,
+                                    [type]: { ...formula, taxPerLiter: parseFloat(e.target.value) || 0 }
+                                  };
+                                  saveFormulas(newFormulas);
+                                }}
+                                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Fixed Tax ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={formula.taxFixed}
+                                onChange={(e) => {
+                                  const newFormulas = {
+                                    ...formulas,
+                                    [type]: { ...formula, taxFixed: parseFloat(e.target.value) || 0 }
+                                  };
+                                  saveFormulas(newFormulas);
+                                }}
+                                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Shipping / Case ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={formula.shippingPerCase}
+                                onChange={(e) => {
+                                  const newFormulas = {
+                                    ...formulas,
+                                    [type]: { ...formula, shippingPerCase: parseFloat(e.target.value) || 0 }
+                                  };
+                                  saveFormulas(newFormulas);
+                                }}
+                                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Margin Divisor</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={formula.marginDivisor}
+                                onChange={(e) => {
+                                  const newFormulas = {
+                                    ...formulas,
+                                    [type]: { ...formula, marginDivisor: parseFloat(e.target.value) || 0.65 }
+                                  };
+                                  saveFormulas(newFormulas);
+                                }}
+                                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">SRP Multiplier</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={formula.srpMultiplier}
+                                onChange={(e) => {
+                                  const newFormulas = {
+                                    ...formulas,
+                                    [type]: { ...formula, srpMultiplier: parseFloat(e.target.value) || 1.47 }
+                                  };
+                                  saveFormulas(newFormulas);
+                                }}
+                                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all font-mono text-sm"
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
 
-                  <div className="mt-10 p-6 bg-slate-50 rounded-3xl border border-slate-100 flex items-start space-x-4">
-                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-slate-400 shrink-0 shadow-sm border border-slate-200">
-                      <ClipboardList className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="font-extrabold text-slate-900 uppercase tracking-widest text-[10px] mb-2">Algorithm Logic (Vinosmith Standard)</p>
-                      <ol className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2 text-[11px] font-medium text-slate-500 italic">
-                        <li>1. Case Volume = (Pack × Size ML) ÷ 1000</li>
-                        <li>2. Combined Tax = (Volume × Tax/L) + Flat Tax</li>
-                        <li>3. Laid In Cost = FOB + Delivery + Tax</li>
-                        <li>4. Whls Net = Laid In ÷ Margin Divisor</li>
-                        <li>5. SRP = ROUNDUP(Unit Net × SRP Mult, 0) - .01</li>
-                        <li>6. Frontline = SRP ÷ SRP Mult</li>
-                      </ol>
+                    <div className="mt-10 p-6 bg-slate-50 rounded-3xl border border-slate-100 flex items-start space-x-4">
+                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-slate-400 shrink-0 shadow-sm border border-slate-200">
+                        <ClipboardList className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="font-extrabold text-slate-900 uppercase tracking-widest text-[10px] mb-2">Algorithm Logic (Vinosmith Standard)</p>
+                        <ol className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2 text-[11px] font-medium text-slate-500 italic">
+                          <li>1. Case Volume = (Pack × Size ML) ÷ 1000</li>
+                          <li>2. Combined Tax = (Volume × Tax/L) + Flat Tax</li>
+                          <li>3. Laid In Cost = FOB + Delivery + Tax</li>
+                          <li>4. Whls Net = Laid In ÷ Margin Divisor</li>
+                          <li>5. SRP = ROUNDUP(Unit Net × SRP Mult, 0) - .01</li>
+                          <li>6. Frontline = SRP ÷ SRP Mult</li>
+                        </ol>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
 
             {/* Supplier Selection Modal */}
@@ -2944,20 +2999,22 @@ const WineDistributorApp = () => {
               </div>
             )}
             {/* Admin Tools */}
-            <div className="flex justify-center mt-20 pb-10">
-              <button
-                onClick={async () => {
-                  setDeleteConfirmation({
-                    type: 'reset',
-                    name: 'ALL SYSTEM DATA'
-                  });
-                }}
-                className="px-8 py-4 bg-white text-rose-400 border border-slate-100 rounded-2xl font-bold text-xs hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all duration-300 shadow-sm flex items-center space-x-2 active:scale-95 group"
-              >
-                <Trash2 className="w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity" />
-                <span>Reset Entire Database</span>
-              </button>
-            </div>
+            {currentUser.isSuperAdmin && (
+              <div className="flex justify-center mt-20 pb-10">
+                <button
+                  onClick={async () => {
+                    setDeleteConfirmation({
+                      type: 'reset',
+                      name: 'ALL SYSTEM DATA'
+                    });
+                  }}
+                  className="px-8 py-4 bg-white text-rose-400 border border-slate-100 rounded-2xl font-bold text-xs hover:bg-rose-50 hover:text-rose-600 hover:border-rose-100 transition-all duration-300 shadow-sm flex items-center space-x-2 active:scale-95 group"
+                >
+                  <Trash2 className="w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity" />
+                  <span>Reset Entire Database</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -3382,7 +3439,7 @@ const WineDistributorApp = () => {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {specialOrderList.map(item => (
+                    {specialOrderList.slice().reverse().map(item => (
                       <div key={item.id} className="bg-white border border-slate-100 rounded-[2rem] p-8 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 group">
                         <div className="flex justify-between items-start mb-6">
                           <div className="flex-1 pr-6">
@@ -3442,13 +3499,10 @@ const WineDistributorApp = () => {
                                 className="text-[10px] font-bold uppercase tracking-widest bg-slate-50 border border-slate-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-rose-500/10 transition-all cursor-pointer"
                               >
                                 <option value="Requested">Requested</option>
-                                <option value="ERP Item Created">ERP Item Created</option>
                                 <option value="Sample Pending">Sample Pending</option>
-                                <option value="Ordered">Ordered</option>
-                                <option value="Ordered from Supplier">Ordered from Supplier</option>
-                                <option value="Pending Arrival">Pending Arrival</option>
-                                <option value="In Stock">In Stock</option>
+                                <option value="On Purchase Order">On Purchase Order</option>
                                 <option value="Backordered">Backordered</option>
+                                <option value="In Stock">In Stock</option>
                                 <option value="Out of Stock">Out of Stock</option>
                                 <option value="Delivered">Delivered</option>
                               </select>
@@ -3471,7 +3525,7 @@ const WineDistributorApp = () => {
                             <textarea
                               value={item.notes}
                               onChange={(e) => updateListItemMetadata(item.id, item.status, e.target.value)}
-                              disabled={item.submitted && currentUser.type === 'customer'}
+                              disabled={false}
                               placeholder="Add memo for distributor..."
                               rows="2"
                               className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500/10 focus:border-rose-500 transition-all font-medium text-xs text-slate-500 disabled:opacity-50"
