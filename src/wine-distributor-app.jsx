@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Wine, Package, Users, LogOut, X, Search, ShoppingCart, FileSpreadsheet, Settings, ChevronDown, ChevronRight, ClipboardList, ListPlus, UserCheck, Edit, Trash2, Download, Plus, ExternalLink, LayoutGrid, List } from 'lucide-react';
+import { Upload, Wine, Package, Users, LogOut, X, Search, ShoppingCart, FileSpreadsheet, ChevronDown, ChevronRight, ClipboardList, UserCheck, Edit, Trash2, Download, Plus, ExternalLink, LayoutGrid, List } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { signIn, signUp, signOut, resetPasswordRequest, updatePassword, getCurrentUser, onAuthStateChange } from './lib/auth';
-import { getProducts, getDiscontinuedProducts, saveProduct, saveProducts, deleteProduct, discontinueProductsBySupplier, getSuppliers } from './lib/products';
-import { getFormulas, updateFormula } from './lib/formulas';
-import { getOrders, createOrder, updateOrder } from './lib/orders';
+import { signIn, signUp, signOut } from './lib/auth';
+import { getProducts, getDiscontinuedProducts, saveProducts } from './lib/products';
+import { getFormulas } from './lib/formulas';
+import { getOrders } from './lib/orders';
 import { getAllSpecialOrders } from './lib/special-orders';
 
 const WineDistributorApp = () => {
