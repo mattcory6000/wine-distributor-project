@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Wine, Package, Users, LogOut, X, Search, ShoppingCart, FileSpreadsheet, Settings, ChevronDown, ChevronRight, ClipboardList, ListPlus, UserCheck, Edit, Trash2, Download, Plus, ExternalLink, LayoutGrid, List } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { signIn, signUp, signOut, resetPasswordRequest, updatePassword, getCurrentUser, onAuthStateChange } from './lib/auth';
+import { getProducts, getDiscontinuedProducts, saveProduct, saveProducts, deleteProduct, discontinueProductsBySupplier, getSuppliers } from './lib/products';
+
 
 const WineDistributorApp = () => {
   const [currentUser, setCurrentUser] = useState(null);
@@ -131,38 +133,52 @@ const WineDistributorApp = () => {
 
   const loadFromStorage = async () => {
     try {
-      const productsResult = await window.storage.get('wine-products');
-      if (productsResult) {
-        setProducts(JSON.parse(productsResult.value));
+      // Load products from Supabase
+      const supabaseProducts = await getProducts();
+      if (supabaseProducts.length > 0) {
+        setProducts(supabaseProducts);
+      } else {
+        // Fallback to local storage if Supabase is empty
+        const productsResult = await window.storage?.get('wine-products');
+        if (productsResult) {
+          setProducts(JSON.parse(productsResult.value));
+        }
       }
 
-      const ordersResult = await window.storage.get('wine-orders');
+      // Load discontinued products from Supabase
+      const supabaseDiscontinued = await getDiscontinuedProducts();
+      if (supabaseDiscontinued.length > 0) {
+        setDiscontinuedProducts(supabaseDiscontinued);
+      } else {
+        const discontinuedResult = await window.storage?.get('wine-discontinued');
+        if (discontinuedResult) {
+          setDiscontinuedProducts(JSON.parse(discontinuedResult.value));
+        }
+      }
+
+      // These still use local storage for now
+      const ordersResult = await window.storage?.get('wine-orders');
       if (ordersResult) {
         setOrders(JSON.parse(ordersResult.value));
       }
 
-      const discontinuedResult = await window.storage.get('wine-discontinued');
-      if (discontinuedResult) {
-        setDiscontinuedProducts(JSON.parse(discontinuedResult.value));
-      }
-
-      const formulasResult = await window.storage.get('wine-formulas');
+      const formulasResult = await window.storage?.get('wine-formulas');
       if (formulasResult) {
         setFormulas(JSON.parse(formulasResult.value));
       }
 
-      const mappingTemplatesResult = await window.storage.get('wine-mapping-templates');
+      const mappingTemplatesResult = await window.storage?.get('wine-mapping-templates');
       if (mappingTemplatesResult) {
         setMappingTemplates(JSON.parse(mappingTemplatesResult.value));
       }
 
-      const specialOrdersResult = await window.storage.get('wine-special-orders');
+      const specialOrdersResult = await window.storage?.get('wine-special-orders');
       if (specialOrdersResult) {
         const lists = JSON.parse(specialOrdersResult.value);
         setAllCustomerLists(lists);
       }
 
-      const orderNotesResult = await window.storage.get('wine-order-notes');
+      const orderNotesResult = await window.storage?.get('wine-order-notes');
       if (orderNotesResult) {
         setOrderNotes(JSON.parse(orderNotesResult.value));
       }
@@ -180,11 +196,11 @@ const WineDistributorApp = () => {
         console.error('Failed to load taxonomy', e);
       }
     } catch (error) {
-      console.log('No existing data found, starting fresh');
+      console.log('Error loading data:', error);
     }
   };
 
-  const saveProducts = async (newProducts) => {
+  const saveProductsLocal = async (newProducts) => {
     setProducts(newProducts);
     await window.storage.set('wine-products', JSON.stringify(newProducts));
   };
@@ -776,7 +792,7 @@ const WineDistributorApp = () => {
 
       // Update active catalog with new products
       const updatedProducts = [...otherProducts, ...productsWithPricing];
-      await saveProducts(updatedProducts);
+      await saveProductsLocal(updatedProducts);
 
       // Save mapping template for future use
       await saveMappingTemplate(supplierName, columnMapping);
@@ -1014,9 +1030,9 @@ const WineDistributorApp = () => {
     alert('Special order list updated and rep notified!');
   };
 
-  const deleteProduct = async (productId) => {
+  const handleDeleteProduct = async (productId) => {
     const updatedProducts = products.filter(p => p.id !== productId);
-    await saveProducts(updatedProducts);
+    await saveProductsLocal(updatedProducts);
     setUploadStatus('Product deleted successfully');
     setTimeout(() => setUploadStatus(''), 3000);
     setDeleteConfirmation(null);
@@ -1026,7 +1042,7 @@ const WineDistributorApp = () => {
     const pricing = calculateFrontlinePrice(updatedProduct);
     const finalProduct = { ...updatedProduct, ...pricing };
     const updatedProducts = products.map(p => p.id === finalProduct.id ? finalProduct : p);
-    await saveProducts(updatedProducts);
+    await saveProductsLocal(updatedProducts);
     setUploadStatus(`Updated ${finalProduct.producer} - ${finalProduct.productName}`);
     setTimeout(() => setUploadStatus(''), 3000);
     setEditingProduct(null);
@@ -2989,7 +3005,7 @@ const WineDistributorApp = () => {
                             alert('Error resetting data');
                           }
                         } else {
-                          deleteProduct(deleteConfirmation.id);
+                          handleDeleteProduct(deleteConfirmation.id);
                         }
                       }}
                       id="confirm-delete-btn"
