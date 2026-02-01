@@ -7,23 +7,37 @@ const ORG_ID = 'a0000000-0000-0000-0000-000000000001';
  * Fetch all products for the organization
  */
 export async function getProducts() {
-    const { data, error } = await supabase
-        .from('products')
-        .select(`
-      *,
-      suppliers (name)
-    `)
-        .eq('organization_id', ORG_ID)
-        .eq('is_discontinued', false)
-        .order('producer');
+    let allProducts = [];
+    let from = 0;
+    const pageSize = 1000;
 
-    if (error) {
-        console.error('Error fetching products:', error);
-        return [];
+    while (true) {
+        const { data, error } = await supabase
+            .from('products')
+            .select(`
+        *,
+        suppliers (name)
+      `)
+            .eq('organization_id', ORG_ID)
+            .eq('is_discontinued', false)
+            .order('producer')
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            console.error('Error fetching products:', error);
+            break;
+        }
+
+        if (!data || data.length === 0) break;
+
+        allProducts = [...allProducts, ...data];
+
+        if (data.length < pageSize) break;
+        from += pageSize;
     }
 
     // Transform to match existing app format
-    return data.map(p => ({
+    return allProducts.map(p => ({
         id: p.id,
         itemCode: p.item_code,
         producer: p.producer,
