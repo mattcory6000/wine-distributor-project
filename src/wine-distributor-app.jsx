@@ -4,7 +4,6 @@ import * as XLSX from 'xlsx';
 import { signIn, signUp, signOut, resetPasswordRequest, updatePassword, getCurrentUser, onAuthStateChange } from './lib/auth';
 import { getProducts, getDiscontinuedProducts, saveProduct, saveProducts, deleteProduct, discontinueProductsBySupplier, getSuppliers } from './lib/products';
 
-
 const WineDistributorApp = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState('login');
